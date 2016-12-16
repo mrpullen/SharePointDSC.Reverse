@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B4581FED-DD34-49E8-BBD7-D00060388B9B}"
+	ProjectSection(SolutionItems) = preProject
+		ReverseDSC.Util.psm1 = ReverseDSC.Util.psm1
+		SharePointDSC.Reverse.ps1 = SharePointDSC.Reverse.ps1
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(TeamFoundationVersionControl) = preSolution
+		SccNumberOfProjects = 1
+		SccEnterpriseProvider = {4CA58AB2-18FA-4F8D-95D4-32DDF27D184C}
+		SccTeamFoundationServer = https://nikcharleboispfe.visualstudio.com/
+		SccLocalPath0 = .
+	EndGlobalSection
+EndGlobal
