@@ -653,7 +653,7 @@ function Read-SPManagedAccounts ($modulePath, $params){
 }
 
 <## This function retrieves all Services in the SharePoint farm. It does not care if the service is enabled or not. It lists them all, and simply sets the "Ensure" attribute of those that are disabled to "Absent". #>
-function Read-SPServiceInstance ($modulePath, $params){
+function Read-SPServiceInstance ($modulePath, $params, $Server){
     if($modulePath -ne $null)
     {
         $module = Resolve-Path $modulePath
@@ -663,21 +663,32 @@ function Read-SPServiceInstance ($modulePath, $params){
         Import-Module $module
     }    
 
-    $serviceInstances = Get-SPServiceInstance | Where{$_.Server.Name -eq $Server} | Sort-Object -Property TypeName
+    $serviceInstancesOnCurrentServer = Get-SPServiceInstance | Where{$_.Server.Name -eq $Server} | Sort-Object -Property TypeName
 
     if($params -eq $null)
     {
         $params = Get-DSCFakeParameters -FilePath $module
     }
 
-    foreach($serviceInstance in $serviceInstances)
+    $ensureValue = "Present"
+    foreach($serviceInstance in $serviceInstancesOnCurrentServer)
     {
-        $params.Name = $serviceInstance.Name
+        if($serviceInstance.Status -eq "Online")
+        {
+            $ensureValue = "Present"
+        }
+        else
+        {
+            $ensureValue = "Absent"
+        }
+        $params.Name = $serviceInstance.TypeName
+        $params.Ensure = $ensureValue
+        $results = Get-TargetResource @params
+        
         if($serviceInstance.TypeName -eq "Distributed Cache")
         {
             $Script:dscConfigContent += "        SPDistributedCacheService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
             $Script:dscConfigContent += "        {`r`n"
-            $results = Get-TargetResource @params
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
             $Script:dscConfigContent += "        }`r`n"
         }
@@ -685,15 +696,13 @@ function Read-SPServiceInstance ($modulePath, $params){
         {
             $Script:dscConfigContent += "        SPUserProfileSyncService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
             $Script:dscConfigContent += "        {`r`n"
-            $results = Get-TargetResource @params
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
             $Script:dscConfigContent += "        }`r`n"
         }
         else
         {
             $Script:dscConfigContent += "        SPServiceInstance " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
-            $Script:dscConfigContent += "        {`r`n"
-            $results = Get-TargetResource @params
+            $Script:dscConfigContent += "        {`r`n"            
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
             $Script:dscConfigContent += "        }`r`n"
         }
