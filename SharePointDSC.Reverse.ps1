@@ -20,7 +20,7 @@ function Orchestrator
     $relPath = "ReverseDSC.Util.psm1"
     Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath $relPath -Resolve) -Force
 
-    $Global:spFarmAccount = Get-Credential -Message "Credentials with Farm Admin Rights"
+    $Global:spFarmAccount = Get-Credential -Message "Credentials with Farm Admin Rights" -UserName $env:USERDOMAIN\$env:USERNAME
     Store-Credentials $Global:spFarmAccount
 
     <# Ensure the user executing the script is not the same as the farm admin account provided #>    
@@ -216,6 +216,12 @@ function Check-Prerequisites
 
     <# Check to see if the SharePointDSC module is installed on the machine #>
     $spDSCCheck = Get-DSCResource -Module "SharePointDSC" | ?{$_.Version -eq $SPDSCVersion}
+    <# Because the SkipPublisherCheck parameter doesn't seem to be supported on Win2012R2 / PowerShell prior to 5.1, let's set whether the parameters are specified here. #>
+    if (Get-Command -Name Install-Module -ParameterName SkipPublisherCheck -ErrorAction SilentlyContinue)
+    {
+        $skipPublisherCheckParameter = @{SkipPublisherCheck = $true}
+    }
+    else {$skipPublisherCheckParameter = @{}}
     if($spDSCCheck.Length -eq 0)
     {        
         $cmd = Get-Command Install-Module
@@ -225,7 +231,7 @@ function Check-Prerequisites
             if($shouldInstall.ToLower() -eq "y")
             {
                 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-                Install-Module SharePointDSC -RequiredVersion $SPDSCVersion -Confirm:$false -SkipPublisherCheck:$true
+                Install-Module SharePointDSC -RequiredVersion $SPDSCVersion -Confirm:$false @skipPublisherCheckParameter
             }
             else
             {
@@ -1056,8 +1062,24 @@ function Get-SPReverseDSC()
     Orchestrator
 
     <## Prompts the user to specify the FOLDER path where the resulting PowerShell DSC Configuration Script will be saved. #>
-    $OutputDSCPath = Read-Host "Output Folder for DSC Configuration"
+    $OutputDSCPath = Read-Host "Please Enter Output Folder for DSC Configuration (Will be Created as Necessary)"
 
+    <## Ensures the specified output folder path actually exists; if not, tries to create it and throws an exception if we can't. ##>
+    while (!(Test-Path -Path $OutputDSCPath -PathType Container -ErrorAction SilentlyContinue))
+    {
+        try
+        {
+            Write-Output "Directory `"$OutputDSCPath`" doesn't exist; creating..."
+            New-Item -Path $OutputDSCPath -ItemType Directory | Out-Null
+            if ($?) {break}
+        }
+        catch
+        {
+            Write-Warning "$($_.Exception.Message)"
+            Write-Warning "Could not create folder $OutputDSCPath!"
+        }
+        $OutputDSCPath = Read-Host "Please Enter Output Folder for DSC Configuration (Will be Created as Necessary)"
+    }
     <## Ensures the path we specify ends with a Slash, in order to make sure the resulting file path is properly structured. #>
     if(!$OutputDSCPath.EndsWith("\") -and !$OutputDSCPath.EndsWith("/"))
     {
@@ -1065,8 +1087,12 @@ function Get-SPReverseDSC()
     }
 
     <## Save the content of the resulting DSC Configuration file into a file at the specified path. #>
-    $OutputDSCPath += "SP-Farm.DSC.ps1"
-    $Script:dscConfigContent | Out-File $OutputDSCPath
+    $outputDSCFile = $OutputDSCPath + "SP-Farm.DSC.ps1"
+    $Script:dscConfigContent | Out-File $outputDSCFile
+    Write-Output "Done."
+    <## Wait a couple of seconds, then open our $outputDSCPath in Windows Explorer so we can review the glorious output. ##>
+    Start-Sleep 2
+    Invoke-Item -Path $OutputDSCPath
 }
 
 Add-PSSnapin Microsoft.SharePoint.PowerShell -EA SilentlyContinue
