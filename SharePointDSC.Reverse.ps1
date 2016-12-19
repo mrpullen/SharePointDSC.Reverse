@@ -58,6 +58,7 @@ function Orchestrator
     Set-VariableSection
     $currentStep++
 
+    $serverNumber = 1
     foreach($spServer in $spServers)
     {
         <## SQL servers are returned by Get-SPServer but they have a Role of 'Invalid'. Therefore we need to ignore these. The resulting PowerShell DSC Configuration script does not take into account the configuration of the SQL server for the SharePoint Farm at this point in time. We are activaly working on giving our users an experience that is as painless as possible, and are planning on integrating the SQL DSC Configuration as part of our feature set. #>
@@ -69,68 +70,120 @@ function Orchestrator
             Set-ConfigurationSettings
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPFarm
+            <# If this is the first server in the farm, then generate the SPCreateFarm config section. Otherwise, generate the 
+               SPJoinFarm one. #>
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPFarm
+            }
+            else
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPJoinFarm
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPWebApplications
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPWebApplications
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Path(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPManagedPaths
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Path(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPManagedPaths
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPManagedAccounts
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPManagedAccounts
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Application Pool(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPServiceApplicationPools
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Application Pool(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPServiceApplicationPools
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SPSites
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPSites
+            }
             $currentStep++
 
             Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Service Instance(s)...") -PercentComplete ($currentStep/$totalSteps*100)
             Read-SPServiceInstance -Server $spServer.Name
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Diagnostic Logging Settings...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-DiagnosticLoggingSettings
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Diagnostic Logging Settings...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-DiagnosticLoggingSettings
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Usage Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-UsageServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Usage Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-UsageServiceApplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning State Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-StateServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning State Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-StateServiceApplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning User Profile Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-UserProfileServiceapplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning User Profile Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-UserProfileServiceapplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Cache Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-CacheAccounts
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Cache Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-CacheAccounts
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Secure Store Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SecureStoreServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Secure Store Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SecureStoreServiceApplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Business Connectivity Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-BCSServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Business Connectivity Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-BCSServiceApplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-SearchServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SearchServiceApplication
+            }
             $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Metadata Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-            Read-ManagedMetadataServiceApplication
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Metadata Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-ManagedMetadataServiceApplication
+            }
             $currentStep++
 
             Write-Progress -Activity ("[" + $spServer.Name + "] Configuring Local Configuration Manager (LCM)...") -PercentComplete ($currentStep/$totalSteps*100)
@@ -138,6 +191,7 @@ function Orchestrator
             $currentStep++
 
             $Script:dscConfigContent += "`r`n    }`r`n"
+            $serverNumber++
         }
     }    
     $Script:dscConfigContent += "`r`n}`r`n"
@@ -277,9 +331,7 @@ function Set-ConfigurationData
 function Set-Imports
 {
     $Script:dscConfigContent += "    Import-DscResource -ModuleName PSDesiredStateConfiguration`r`n"
-    $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC #-ModuleVersion '1.4.0.0'`r`n"
-    #$Script:dscConfigContent += "    Import-DscResource -ModuleName xWebAdministration #-ModuleVersion '1.14.0.0'`r`n"
-    #$Script:dscConfigContent += "    Import-DscResource -ModuleName xCredSSP #-ModuleVersion '1.1.0.0'`r`n"
+    $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC -ModuleVersion '$SPDSCVersion'`r`n"
 }
 
 <## This function really is optional, but helps provide valuable information about the various software components installed in the current SharePoint farm (i.e. Cummulative Updates, Language Packs, etc.). #>
@@ -356,6 +408,46 @@ function Read-SPFarm ($modulePath, $params){
     $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
     $Script:dscConfigContent += "`r`n        }`r`n"
 }
+
+<## This function declares the xSPCreateFarm object required to create the config and admin database for the resulting SharePoint Farm. #>
+function Read-SPJoinFarm ($modulePath, $params){
+    if($modulePath -ne $null)
+    {
+        $module = Resolve-Path $modulePath
+    }
+    else {
+        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPJoinFarm\MSFT_SPJoinFarm.psm1")
+        Import-Module $module
+    }
+        
+    $Script:dscConfigContent += "        SPJoinFarm JoinFarm`r`n        {`r`n"
+
+    if($params -eq $null)
+    {
+        $params = Get-DSCFakeParameters -FilePath $module -FarmAccount $Global:spFarmAccount
+    }    
+
+    <# If not SP2016, remove the server role param. #>
+    if ((Get-SPDSCInstalledProductVersion).FileMajorPart -ne 16) {
+        $params.Remove("ServerRole")
+    }
+
+    <# Can't have both the InstallAccount and PsDscRunAsCredential variables present. Remove InstallAccount if both are there. #>
+    if($params.Contains("InstallAccount"))
+    {
+        $params.Remove("InstallAccount")
+    }
+
+    $results = Get-TargetResource @params
+
+    <# Remove the default generated PassPhrase and ensure the resulting Configuration Script will prompt user for it. #>
+    $results.Remove("Passphrase");    
+    $Script:dscConfigContent += "            Passphrase = New-Object System.Management.Automation.PSCredential ('Passphrase', `$passphrase);`r`n"
+
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "`r`n        }`r`n"
+}
+
 
 <## This function obtains a reference to every Web Application in the farm and declares their properties (i.e. Port, Associated IIS Application Pool, etc.). #>
 function Read-SPWebApplications ($modulePath, $params){
