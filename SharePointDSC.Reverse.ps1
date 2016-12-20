@@ -211,33 +211,60 @@ function Check-Prerequisites
     }
 
     <# Check to see if the SharePointDSC module is installed on the machine #>
-    $spDSCCheck = Get-DSCResource -Module "SharePointDSC" | ?{$_.Version -eq $SPDSCVersion}
-    <# Because the SkipPublisherCheck parameter doesn't seem to be supported on Win2012R2 / PowerShell prior to 5.1, let's set whether the parameters are specified here. #>
-    if (Get-Command -Name Install-Module -ParameterName SkipPublisherCheck -ErrorAction SilentlyContinue)
+    if(Get-Command "Get-DSCModule" -EA SilentlyContinue)
     {
-        $skipPublisherCheckParameter = @{SkipPublisherCheck = $true}
-    }
-    else {$skipPublisherCheckParameter = @{}}
-    if($spDSCCheck.Length -eq 0)
-    {        
-        $cmd = Get-Command Install-Module
-        if($psVersionTable.PSVersion.Major -ge 5 -or !$cmd)
+        $spDSCCheck = Get-DSCResource -Module "SharePointDSC" | ?{$_.Version -eq $SPDSCVersion}
+        <# Because the SkipPublisherCheck parameter doesn't seem to be supported on Win2012R2 / PowerShell prior to 5.1, let's set whether the parameters are specified here. #>
+        if (Get-Command -Name Install-Module -ParameterName SkipPublisherCheck -ErrorAction SilentlyContinue)
         {
-            $shouldInstall = Read-Host "The SharePointDSC module could not be found on the machine. Do you wish to download and install it (y/n)?"
-            if($shouldInstall.ToLower() -eq "y")
+            $skipPublisherCheckParameter = @{SkipPublisherCheck = $true}
+        }
+        else {$skipPublisherCheckParameter = @{}}
+        if($spDSCCheck.Length -eq 0)
+        {        
+            $cmd = Get-Command Install-Module
+            if($psVersionTable.PSVersion.Major -ge 5 -or !$cmd)
             {
-                Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
-                Install-Module SharePointDSC -RequiredVersion $SPDSCVersion -Confirm:$false @skipPublisherCheckParameter
+                $shouldInstall = Read-Host "The SharePointDSC module could not be found on the machine. Do you wish to download and install it (y/n)?"
+                if($shouldInstall.ToLower() -eq "y")
+                {
+                    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+                    Install-Module SharePointDSC -RequiredVersion $SPDSCVersion -Confirm:$false @skipPublisherCheckParameter
+                }
+                else
+                {
+                    Write-Host "We are sorry, but the script cannot continue without the SharePoint DSC module installed." -BackgroundColor Yellow -ForegroundColor Black
+                    exit
+                }
             }
             else
             {
-                Write-Host "We are sorry, but the script cannot continue without the SharePoint DSC module installed." -BackgroundColor Yellow -ForegroundColor Black
-                exit
+                Write-Host "W101: We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script" -BackgroundColor Yellow -ForegroundColor Black
             }
         }
-        else
+    }
+    else
+    {
+        <# PowerShell v4 is most likely prsent, without the PackageManagement module. We need to manually check to see if the SharePoint
+           DSC Module is present on the machine. #>
+        Write-Host "W102: We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script" -BackgroundColor Yellow -ForegroundColor Black
+        $modulePaths = $env:PSModulePath.Split(';')
+        $folderFound = $false
+        foreach($modulePath in $modulePaths)
         {
-            Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script" -BackgroundColor Yellow -ForegroundColor Black
+            $spDSCFolder = Get-ChildItem -Recurse -Force $modulePath -ErrorAction SilentlyContinue | Where-Object { ($_.PSIsContainer -eq $true) -and  ( $_.Name -eq "SharePointDSC") }
+            if($spDSCFolder)
+            {
+                if(Get-ChildItem -Force $spDSCFolder.FullName -ErrorAction SilentlyContinue | Where-Object { ($_.PSIsContainer -eq $true) -and  ( $_.Name -eq "$SPDSCVersion") } | Select-Object Name)
+                {
+                    $folderFound = $true
+                }
+            }
+        }
+        if(!$folderFound)
+        {
+            Write-Host "Could not find the SharePointDSC Module Resource on the current server."
+            exit;
         }
     }
 }
@@ -287,7 +314,7 @@ function Read-SQLVersion
 
 function Set-VariableSection
 {
-    $Script:dscConfigContent += "            `$Script:passphrase = Read-Host 'Farm Passphrase' -AsSecureString;`r`n"
+    $Script:dscConfigContent += "    `$Script:passphrase = Read-Host 'Farm Passphrase' -AsSecureString;`r`n"
 }
 
 function Set-ConfigurationData
