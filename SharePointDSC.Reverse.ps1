@@ -118,7 +118,7 @@ function Orchestrator
             if($serverNumber -eq 1)
             {
                 Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPSites
+                Read-SPSitesAndWebs
             }
             $currentStep++
 
@@ -535,26 +535,16 @@ function Read-SPServiceApplicationPools ($modulePath, $params){
 }
 
 <## This function retrieves a list of all site collections, no matter what Web Application they belong to. The Url attribute helps the xSharePoint DSC Resource determine what Web Application they belong to. #>
-function Read-SPSites ($modulePath, $params){
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSite\MSFT_SPSite.psm1")
-        Import-Module $module
-    }    
+function Read-SPSitesAndWebs ($modulePath, $params){
+    
     $spSites = Get-SPSite -Limit All
-
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module
-    }
-
     $siteGuid = $null
     $siteTitle = $null
     foreach($spsite in $spSites)
     {
+        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSite\MSFT_SPSite.psm1")
+        Import-Module $module
+        $params = Get-DSCFakeParameters -FilePath $module
         $siteGuid = [System.Guid]::NewGuid().toString()
         $siteTitle = $spSite.RootWeb.Title
         if($siteTitle -eq $null)
@@ -573,7 +563,31 @@ function Read-SPSites ($modulePath, $params){
         }
 
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+		$Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spsite.WebApplication.Name.Replace(" ", "").+ "`";`r`n"
         $Script:dscConfigContent += "        }`r`n"
+        
+        $webs = Get-SPWeb -Limit All -Site $spsite
+        foreach($spweb in $webs)
+        {
+            $moduleWeb = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWeb\MSFT_SPWeb.psm1")
+            Import-Module $moduleWeb
+            $paramsWeb = Get-DSCFakeParameters -FilePath $moduleWeb            
+            $paramsWeb.Url = $spweb.Url            
+            $resultsWeb = Get-TargetResource @paramsWeb
+            if(!$resultsWeb.ContainsKey("InstallAccount"))
+            {
+                $resultsWeb.Add("InstallAccount", "`$CredsFarmAccount")
+            }
+            if($resultsWeb.ContainsKey("PsDscRunAsCredential"))
+            {
+                $resultsWeb.Remove("PsDscRunAsCredential")
+            }
+            $Script:dscConfigContent += "        SPWeb " + $spweb.Title.Replace(" ", "") + "-" + $siteGuid + "`r`n"
+            $Script:dscConfigContent += "        {`r`n"
+            $Script:dscConfigContent += Get-DSCBlock -Params $resultsWeb -ModulePath $moduleWeb
+            $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+            $Script:dscConfigContent += "        }`r`n"
+        }
     }
 }
 
