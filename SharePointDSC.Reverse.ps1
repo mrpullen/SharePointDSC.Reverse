@@ -224,7 +224,7 @@ function Check-Prerequisites
         if($spDSCCheck.Length -eq 0)
         {        
             $cmd = Get-Command Install-Module
-            if($psVersionTable.PSVersion.Major -ge 5 -or !$cmd)
+            if($psVersionTable.PSVersion.Major -ge 5 -or $cmd)
             {
                 $shouldInstall = Read-Host "The SharePointDSC module could not be found on the machine. Do you wish to download and install it (y/n)?"
                 if($shouldInstall.ToLower() -eq "y")
@@ -249,9 +249,12 @@ function Check-Prerequisites
     {
         <# PowerShell v4 is most likely present, without the PackageManagement module. We need to manually check to see if the SharePoint
            DSC Module is present on the machine. #>
-        Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
-        Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
-        
+        $cmd = Get-Command Install-Module
+        if(!$cmd)
+        {
+            Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+            Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
+        }
         $moduleObject = Get-DSCResource | ?{$_.Module -like "SharePointDsc"}
         if(!$moduleObject)
         {
@@ -259,7 +262,7 @@ function Check-Prerequisites
             Write-Host "Could not find the SharePointDSC Module Resource on the current server."
             exit;
         }
-        $Script:SPDSCPath = $moduleObject[0].Module.Path.Replace("SharePointDsc.psd1", "").Replace("\", "/")
+        $Script:SPDSCPath = $moduleObject[0].Module.Path.ToLower().Replace("sharepointdsc.psd1", "").Replace("\", "/")
     }
 }
 
