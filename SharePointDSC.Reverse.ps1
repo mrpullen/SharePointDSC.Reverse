@@ -206,7 +206,8 @@ function Check-Prerequisites
     }
     elseif($psVersionTable.PSVersion.Major -lt 4)
     {
-        Write-Host "We are sorry, PowerShell v3 or lower is not supported by the Reverse DSC Engine" -BackgroundColor Yellow -ForegroundColor Black
+        Write-Host "E100"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+        Write-Host "We are sorry, PowerShell v3 or lower is not supported by the Reverse DSC Engine"
         exit
     }
 
@@ -233,7 +234,8 @@ function Check-Prerequisites
                 }
                 else
                 {
-                    Write-Host "We are sorry, but the script cannot continue without the SharePoint DSC module installed." -BackgroundColor Yellow -ForegroundColor Black
+                    Write-Host "E101"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+                    Write-Host "We are sorry, but the script cannot continue without the SharePoint DSC module installed."
                     exit
                 }
             }
@@ -263,6 +265,7 @@ function Check-Prerequisites
         }
         if(!$folderFound)
         {
+            Write-Host "E103"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
             Write-Host "Could not find the SharePointDSC Module Resource on the current server."
             exit;
         }
