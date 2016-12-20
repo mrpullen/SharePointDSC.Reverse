@@ -247,9 +247,10 @@ function Check-Prerequisites
     }
     else
     {
-        <# PowerShell v4 is most likely prsent, without the PackageManagement module. We need to manually check to see if the SharePoint
+        <# PowerShell v4 is most likely present, without the PackageManagement module. We need to manually check to see if the SharePoint
            DSC Module is present on the machine. #>
-        Write-Host "W102: We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script" -BackgroundColor Yellow -ForegroundColor Black
+        Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+        Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
         $modulePaths = $env:PSModulePath.Split(';')
         $folderFound = $false
         foreach($modulePath in $modulePaths)
@@ -265,7 +266,7 @@ function Check-Prerequisites
         }
         if(!$folderFound)
         {
-            Write-Host "E103"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+            Write-Host "E103"  -BackgroundColor Red -ForegroundColor Black -NoNewline
             Write-Host "Could not find the SharePointDSC Module Resource on the current server."
             exit;
         }
@@ -282,7 +283,7 @@ function Read-OperatingSystemVersion
     {
         $serverName = $spServer.Name
         try{
-            $osInfo = Get-CimInstance Win32_OperatingSystem  -ComputerName $serverName| Select-Object @{Label="OSName"; Expression={$_.Name.Substring($_.Name.indexof("W"),$_.Name.indexof("|")-$_.Name.indexof("W"))}} , Version ,OSArchitecture -ErrorAction SilentlyContinue
+            $osInfo = Get-CimInstance Win32_OperatingSystem  -ComputerName $serverName -ErrorAction SilentlyContinue| Select-Object @{Label="OSName"; Expression={$_.Name.Substring($_.Name.indexof("W"),$_.Name.indexof("|")-$_.Name.indexof("W"))}} , Version ,OSArchitecture -ErrorAction SilentlyContinue
             $Script:dscConfigContent += "    [" + $serverName + "]: " + $osInfo.OSName + "(" + $osInfo.OSArchitecture + ")    ----    " + $osInfo.Version + "`r`n"
         }
         catch{}
