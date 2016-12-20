@@ -110,6 +110,13 @@ function Orchestrator
 
             if($serverNumber -eq 1)
             {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Content Database(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPContentDatabase
+            }
+            $currentStep++
+
+            if($serverNumber -eq 1)
+            {
                 Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
                 Read-SPSites
             }
@@ -249,7 +256,7 @@ function Check-Prerequisites
     {
         <# PowerShell v4 is most likely present, without the PackageManagement module. We need to manually check to see if the SharePoint
            DSC Module is present on the machine. #>
-        $cmd = Get-Command Install-Module
+        $cmd = Get-Command Install-Module -EA SilentlyContinue
         if(!$cmd)
         {
             Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
@@ -1031,6 +1038,25 @@ function Read-SearchServiceApplication ($modulePath, $params){
     }
 }
 
+function Read-SPContentDatabase
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPContentDatabase\MSFT_SPContentDatabase.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $spContentDBs = Get-SPContentDatabase
+
+    foreach($spContentDB in $spContentDBs)
+    {
+        $Script:dscConfigContent += "        SPContentDatabase " + $spContentDB.Name.Replace(" ", "") + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $spContentDB.Name
+        $params.WebAppUrl = $spContentDB.WebApplication.Url
+        $results = Get-TargetResource @params
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"  
+    }
+}
+
 <## This function sets the settings for the Local Configuration Manager (LCM) component on the server we will be configuring using our resulting DSC Configuration script. The LCM component is the one responsible for orchestrating all DSC configuration related activities and processes on a server. This method specifies settings telling the LCM to not hesitate rebooting the server we are configurating automatically if it requires a reboot (i.e. During the SharePoint Prerequisites installation). Setting this value helps reduce the amount of manual interaction that is required to automate the configuration of our SharePoint farm using our resulting DSC Configuration script. #>
 function Set-LCM
 {
@@ -1256,8 +1282,10 @@ function Get-RequiredModules
     }
     catch
     {
-        Write-Output $_.Exception
-        Write-Error "Unable to download/install $requiredModule - check Internet access etc."
+        <# Nik20161220 - Not sure we want to throw an error if the server doesn't have internet connectivity as this will mostly
+                         represent close to 90% of the scenarios; #>
+        #Write-Output $_.Exception
+        #Write-Error "Unable to download/install $requiredModule - check Internet access etc."
     }
 }
 
