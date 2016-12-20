@@ -251,25 +251,15 @@ function Check-Prerequisites
            DSC Module is present on the machine. #>
         Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
         Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
-        $modulePaths = $env:PSModulePath.Split(';')
-        $folderFound = $false
-        foreach($modulePath in $modulePaths)
-        {
-            $spDSCFolder = Get-ChildItem -Recurse -Force $modulePath -ErrorAction SilentlyContinue | Where-Object { ($_.PSIsContainer -eq $true) -and  ( $_.Name -eq "SharePointDSC") }
-            if($spDSCFolder)
-            {
-                if(Get-ChildItem -Force $spDSCFolder.FullName -ErrorAction SilentlyContinue | Where-Object { ($_.PSIsContainer -eq $true) -and  ( $_.Name -eq "$SPDSCVersion") } | Select-Object Name)
-                {
-                    $folderFound = $true
-                }
-            }
-        }
-        if(!$folderFound)
+        
+        $moduleObject = Get-DSCResource | ?{$_.Module -like "SharePointDsc"}
+        if(!$moduleObject)
         {
             Write-Host "E103"  -BackgroundColor Red -ForegroundColor Black -NoNewline
             Write-Host "Could not find the SharePointDSC Module Resource on the current server."
             exit;
         }
+        $Script:SPDSCPath = $moduleObject[0].Module.Path.Replace("SharePointDsc.psd1", "").Replace("\", "/")
     }
 }
 
@@ -348,7 +338,14 @@ function Set-ConfigurationData
 function Set-Imports
 {
     $Script:dscConfigContent += "    Import-DscResource -ModuleName PSDesiredStateConfiguration`r`n"
-    $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC -ModuleVersion '$SPDSCVersion'`r`n"
+    if($PSVersionTable.PSVersion.Major -eq 5)
+    {
+        $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC -ModuleVersion '$SPDSCVersion'`r`n"
+    }
+    else
+    {
+        $Script:dscConfigContent += "    Import-DscResource -ModuleName @{ModuleName=`"SharePointDSC`";ModuleVersion=`"$SPDSCVersion`"}`r`n"
+    }
 }
 
 <## This function really is optional, but helps provide valuable information about the various software components installed in the current SharePoint farm (i.e. Cummulative Updates, Language Packs, etc.). #>
@@ -671,21 +668,8 @@ function Read-SPManagedAccounts ($modulePath, $params){
 
 <## This function retrieves all Services in the SharePoint farm. It does not care if the service is enabled or not. It lists them all, and simply sets the "Ensure" attribute of those that are disabled to "Absent". #>
 function Read-SPServiceInstance ($modulePath, $params, $Server){
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPServiceInstance\MSFT_SPServiceInstance.psm1")
-        Import-Module $module
-    }    
 
     $serviceInstancesOnCurrentServer = Get-SPServiceInstance | Where{$_.Server.Name -eq $Server} | Sort-Object -Property TypeName
-
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module
-    }
 
     $ensureValue = "Present"
     foreach($serviceInstance in $serviceInstancesOnCurrentServer)
@@ -698,12 +682,18 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         {
             $ensureValue = "Absent"
         }
-        $params.Name = $serviceInstance.TypeName
-        $params.Ensure = $ensureValue
-        $results = Get-TargetResource @params
-        
+        Write-Verbose $serviceInstance.TypeName
         if($serviceInstance.TypeName -eq "Distributed Cache")
         {
+            $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDistributedCacheService\MSFT_SPDistributedCacheService.psm1")
+            Import-Module $module
+            $params = Get-DSCFakeParameters -FilePath $module
+            $params.Ensure = $ensureValue
+            if($params.ServerProvisionOrder -eq $null)
+            {
+                $params.ServerProvisionOrder = "@()"
+            }
+            $results = Get-TargetResource @params
             $Script:dscConfigContent += "        SPDistributedCacheService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
             $Script:dscConfigContent += "        {`r`n"
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
@@ -711,6 +701,16 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         }
         elseif($serviceInstance.TypeName -eq "User Profile Synchronization Service")
         {
+            $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPUserProfileSyncService\MSFT_SPUserProfileSyncService.psm1")
+            Import-Module $module
+            $params = Get-DSCFakeParameters -FilePath $module
+            $params.Ensure = $ensureValue
+            $params.FarmAccount = $Global:spFarmAccount            
+            $results = Get-TargetResource @params
+            if($ensureValue -eq "Absent")
+            {
+                $results.UserProfileServiceAppName = "TBD"
+            }
             $Script:dscConfigContent += "        SPUserProfileSyncService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
             $Script:dscConfigContent += "        {`r`n"
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
@@ -718,6 +718,19 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         }
         else
         {
+            $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPServiceInstance\MSFT_SPServiceInstance.psm1")
+            Import-Module $module
+            $params = Get-DSCFakeParameters -FilePath $module
+            if($params.ContainsKey("Name"))
+            {
+                $params.Name = $serviceInstance.TypeName
+            }
+            if($params.ContainsKey("FarmAccount"))
+            {
+                $params.FarmAccount = $Global:spFarmAccount
+            }
+            $params.Ensure = $ensureValue
+            $results = Get-TargetResource @params
             $Script:dscConfigContent += "        SPServiceInstance " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
             $Script:dscConfigContent += "        {`r`n"            
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
