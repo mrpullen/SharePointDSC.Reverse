@@ -28,7 +28,7 @@ function Orchestrator
     $spFarm = Get-SPFarm
     $spServers = $spFarm.Servers
 
-    $totalSteps = 7 + ($spServers.Count * 18)
+    $totalSteps = 7 + ($spServers.Count * 20)
     $currentStep = 1
 
     Write-Progress -Activity "Scanning Operating System Version..." -PercentComplete ($currentStep/$totalSteps*100)
@@ -84,6 +84,13 @@ function Orchestrator
             {
                 Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
                 Read-SPWebApplications
+            }
+            $currentStep++
+
+            if($serverNumber -eq 1)
+            {
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Alternate Url(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPAlternateUrl
             }
             $currentStep++
 
@@ -557,13 +564,13 @@ function Read-SPSitesAndWebs ($modulePath, $params){
         $results = Get-TargetResource @params
 
         <# If the current Quota ID is 0, it means no quota templates were used. Remove param in that case. #>
-        if($spsite.Quota.QuotaID -eq 0)
+        if($spSite.Quota.QuotaID -eq 0)
         {
             $results.Remove("QuotaTemplate")
         }
 
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-		$Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spsite.WebApplication.Name.Replace(" ", "").+ "`";`r`n"
+        $Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spSite.WebApplication.Name.Replace(" ", "") + "`"`r`n"
         $Script:dscConfigContent += "        }`r`n"
         
         $webs = Get-SPWeb -Limit All -Site $spsite
@@ -1065,6 +1072,25 @@ function Read-SPContentDatabase
         $Script:dscConfigContent += "        {`r`n"
         $params.Name = $spContentDB.Name
         $params.WebAppUrl = $spContentDB.WebApplication.Url
+        $results = Get-TargetResource @params
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"  
+    }
+}
+
+function Read-SPAlternateUrl
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAlternateUrl\MSFT_SPAlternateUrl.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $alternateUrls = Get-SPAlternateUrl
+
+    foreach($alternateUrl in $alternateUrls)
+    {
+        $Script:dscConfigContent += "        SPAlternateUrl " + [System.Guid]::NewGuid().toString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.WebAppUrl = $alternateUrl.Uri.AbsoluteUri
+        $params.Zone = $alternateUrl.UrlZone
         $results = Get-TargetResource @params
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "        }`r`n"  
