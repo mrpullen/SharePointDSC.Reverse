@@ -2,6 +2,7 @@
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
  # v1.5.0.0 - Nik Charlebois
  ##############################################################>
+
 <## Script Settings #>
 $VerbosePreference = "SilentlyContinue"
 
@@ -12,13 +13,18 @@ $SPDSCVersion = "1.5.0.0"
 $Script:SPDSCPath = $SPDSCSource + $SPDSCVersion
 $Global:spFarmAccount = ""
 
-<## This is the main function for this script. It acts as a call dispatcher, calling th various functions required in the proper order to get the full farm picture. #>
+<## This is the main function for this script. It acts as a call dispatcher, calling the various functions required in the proper order to get the full farm picture. #>
 function Orchestrator
 {
     Check-Prerequisites
-
-    $relPath = "ReverseDSC.Util.psm1"
-    Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath $relPath -Resolve) -Force
+    $ReverseDSCModule = "ReverseDSC.Util.psm1"
+    $module = (Join-Path -Path $PSScriptRoot -ChildPath $ReverseDSCModule -Resolve -ErrorAction SilentlyContinue)
+    if($module -eq $null)
+    {
+        $module = (Join-Path -Path $PSScriptRoot -ChildPath "..\ReverseDSC\$ReverseDSCModule" -Resolve)
+    }
+    
+    Import-Module -Name $module -Force
 
     $Global:spFarmAccount = Get-Credential -Message "Credentials with Farm Admin Rights" -UserName $env:USERDOMAIN\$env:USERNAME
     Store-Credentials $Global:spFarmAccount
@@ -28,7 +34,7 @@ function Orchestrator
     $spFarm = Get-SPFarm
     $spServers = $spFarm.Servers
 
-    $totalSteps = 7 + ($spServers.Count * 20)
+    $totalSteps = 15 + ($spServers.Count * 20)
     $currentStep = 1
 
     Write-Progress -Activity "Scanning Operating System Version..." -PercentComplete ($currentStep/$totalSteps*100)
@@ -72,128 +78,129 @@ function Orchestrator
             {
                 Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
                 Read-SPFarm
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPWebApplications
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Alternate Url(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPAlternateUrl
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Path(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPManagedPaths
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPManagedAccounts
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Application Pool(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPServiceApplicationPools
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Content Database(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPContentDatabase
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SPSitesAndWebs
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Diagnostic Logging Settings...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-DiagnosticLoggingSettings
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Usage Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-UsageServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning State Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-StateServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning User Profile Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-UserProfileServiceapplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Cache Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-CacheAccounts
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Secure Store Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SecureStoreServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Business Connectivity Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-BCSServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-SearchServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Metadata Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Read-ManagedMetadataServiceApplication
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Access Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAccessServiceApp
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Antivirus Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAntivirusSettings
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Catalog Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAppCatalog
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Domain Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAppDomain
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Management Service App Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAppManagementServiceApp
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Store Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPAppStoreSettings
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Blob Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPBlobCacheSettings
+                $currentStep++
+
+				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Configuration Wizard Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPConfigWizard
+                $currentStep++
+
+				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Database(s) Availability Group Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPDatabaseAAG
+                $currentStep++
+
+				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Distributed Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPDistributedCacheService
+                $currentStep++
+
+				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Excel Services Application Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPExcelServiceApp
+                $currentStep++
+
+				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Administrator(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPFarmAdministrators
+                $currentStep++
             }
             else
             {
                 Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
                 Read-SPJoinFarm
+                $currentStep++
             }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPWebApplications
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Alternate Url(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPAlternateUrl
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Path(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPManagedPaths
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPManagedAccounts
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Application Pool(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPServiceApplicationPools
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Content Database(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPContentDatabase
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SPSitesAndWebs
-            }
-            $currentStep++
 
             Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Service Instance(s)...") -PercentComplete ($currentStep/$totalSteps*100)
             Read-SPServiceInstance -Server $spServer.Name
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Diagnostic Logging Settings...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-DiagnosticLoggingSettings
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Usage Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-UsageServiceApplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning State Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-StateServiceApplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning User Profile Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-UserProfileServiceapplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Cache Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-CacheAccounts
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Secure Store Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SecureStoreServiceApplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Business Connectivity Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-BCSServiceApplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-SearchServiceApplication
-            }
-            $currentStep++
-
-            if($serverNumber -eq 1)
-            {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Metadata Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
-                Read-ManagedMetadataServiceApplication
-            }
             $currentStep++
 
             Write-Progress -Activity ("[" + $spServer.Name + "] Configuring Local Configuration Manager (LCM)...") -PercentComplete ($currentStep/$totalSteps*100)
@@ -501,6 +508,7 @@ function Read-SPWebApplications ($modulePath, $params){
     
     foreach($spWebApp in $spWebApplications)
     {
+		Import-Module $module
         $Script:dscConfigContent += "        SPWebApplication " + $spWebApp.Name.Replace(" ", "") + "`r`n        {`r`n"      
 
         $params.Name = $spWebApp.Name
@@ -509,6 +517,7 @@ function Read-SPWebApplications ($modulePath, $params){
     
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "`r`n        }`r`n"
+		Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication")
     }
 }
 
@@ -572,6 +581,8 @@ function Read-SPSitesAndWebs ($modulePath, $params){
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spSite.WebApplication.Name.Replace(" ", "") + "`"`r`n"
         $Script:dscConfigContent += "        }`r`n"
+
+		Read-SPDesignerSettings($spSite.Url, "SiteCollection")
         
         $webs = Get-SPWeb -Limit All -Site $spsite
         foreach($spweb in $webs)
@@ -815,6 +826,7 @@ function Read-UsageServiceApplication ($modulePath, $params){
         $Script:dscConfigContent += "        SPUsageApplication " + $usageApplication.TypeName.Replace(" ", "") + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
         $results = Get-TargetResource @params
+        $results.Add("InstallAccount", "`$CredsFarmAccount")
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "        }`r`n"
     }
@@ -1036,7 +1048,7 @@ function Read-SearchServiceApplication ($modulePath, $params){
     else {
         $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchServiceApp\MSFT_SPSearchServiceApp.psm1")
         Import-Module $module
-    }    
+    }
     
     if($params -eq $null)
     {
@@ -1054,9 +1066,54 @@ function Read-SearchServiceApplication ($modulePath, $params){
             $params.Name = $searchSAInstance.Name
             $results = Get-TargetResource @params
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-            $Script:dscConfigContent += "        }`r`n"  
+            $Script:dscConfigContent += "        }`r`n"
+
+            #region Search Content Sources
+            $moduleContentSource = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchContentSource\MSFT_SPSearchContentSource.psm1")
+            Import-Module $moduleContentSource
+            $paramsContentSource = Get-DSCFakeParameters -FilePath $moduleContentSource
+            $contentSources = Get-SPEnterpriseSearchCrawlContentSource -SearchApplication $searchSAInstance.Name
+
+            foreach($contentSource in $contentSources)
+            {
+                $sscsGuid = [System.Guid]::NewGuid().toString()
+                $Script:dscConfigContent += "        SPSearchContentSource " + $contentSource.Name.Replace(" ", "") + $sscsGuid + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+                $paramsContentSource.Name = $contentSource.Name
+                $paramsContentSource.ServiceAppName  = $searchSAInstance.Name
+                $resultsContentSource = Get-TargetResource @paramsContentSource
+                
+
+                $searchScheduleModulePath = Resolve-Path ($Script:SPDSCPath + "\Modules\SharePointDsc.Search\SPSearchContentSource.Schedules.psm1")            
+                Import-Module -Name $searchScheduleModulePath
+                # TODO: Figure out way to properly pass CimInstance objects and then add the schedules back;
+                $incremental = Get-SPDSCSearchCrawlSchedule -Schedule $contentSource.IncrementalCrawlSchedule
+                $full = Get-SPDSCSearchCrawlSchedule -Schedule $contentSource.FullCrawlSchedule
+
+                
+                $resultsContentSource.IncrementalSchedule = Get-SPCrawlSchedule $incremental
+                $resultsContentSource.FullSchedule = Get-SPCrawlSchedule $full
+                $Script:dscConfigContent += Get-DSCBlock -Params $resultsContentSource -ModulePath $moduleContentSource
+                $Script:dscConfigContent += "        }`r`n"
+            }
+            #endregion
         }
+        else {
+            $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchServiceApp\MSFT_SPSearchServiceApp.psm1")
+            Import-Module $module
+        }        
     }
+}
+
+function Get-SPCrawlSchedule($params)
+{
+    $currentSchedule = "MSFT_SPSearchCrawlSchedule{`r`n"
+    foreach($key in $params.Keys)
+    {
+        $currentSchedule += "                " + $key + " = `"" + $params[$key] + "`"`r`n"
+    }
+    $currentSchedule += "            }"
+    return $currentSchedule
 }
 
 function Read-SPContentDatabase
@@ -1076,6 +1133,269 @@ function Read-SPContentDatabase
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "        }`r`n"  
     }
+}
+
+function Read-SPAccessServiceApp
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAccessServiceApp\MSFT_SPAccessServiceApp.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $serviceApps = Get-SPServiceApplication
+    $serviceApps = $serviceApps | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Access.Services.MossHost.AccessServicesWebServiceApplication"}
+
+    foreach($spAccessService in $serviceApps)
+    {
+        $Script:dscConfigContent += "        SPAccessServiceApp " + $spAccessService.Name.Replace(" ", "") + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $spAccessService.Name
+        $dbServer = $spAccessService.GetDatabaseServers(1).ServerName
+        $params.DatabaseServer = $dbServer
+        $results = Get-TargetResource @params
+        if(!$results.ContainsKey("InstallAccount"))
+        {
+            $results.Add("InstallAccount", "`$CredsFarmAccount")
+        }
+        if(!$results.ContainsKey("DatabaseServer"))
+        {
+            $results.Add("DatabaseServer", $dbServer)
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"  
+    }
+}
+
+function Read-SPAppCatalog
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppCatalog\MSFT_SPAppCatalog.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $webApps = Get-SPWebApplication
+
+    foreach($webApp in $webApps)
+    {
+        $feature = $webApp.Features.Item([Guid]::Parse("f8bea737-255e-4758-ab82-e34bb46f5828"))
+        if($null -ne $feature)
+        {
+            $appCatalogSiteId = $feature.Properties["__AppCatSiteId"].Value
+            $appCatalogSite = $webApp.Sites | ?{$_.ID -eq $appCatalogSiteId}
+
+            if($null -ne $appCatalogSite)
+            {
+                $Script:dscConfigContent += "        SPAppCatalog " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+                $params.SiteUrl = $appCatalogSite.Url
+                $results = Get-TargetResource @params
+                $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+                $Script:dscConfigContent += "        }`r`n"
+            }
+        }
+    }
+}
+
+function Read-SPAppDomain
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppDomain\MSFT_SPAppDomain.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+
+    $Script:dscConfigContent += "        SPAppDomain " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPFarmAdministrators
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFarmAdministrators\MSFT_SPFarmAdministrators.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+	$params.Remove("MembersToInclude")
+	$params.Remove("MembersToExclude")
+    $Script:dscConfigContent += "        SPFarmAdministrators " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+	$results.Name = "SPFarmAdministrators"
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPExcelServiceApp
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPExcelServiceApp\MSFT_SPExcelServiceApp.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+
+	$excelSSA = Get-SPServiceApplication | ?{$_.TypeName -eq "Excel Services Application Web Service Application"}
+
+	if($null -ne $excelSSA)
+	{
+		$Script:dscConfigContent += "        SPExcelServiceApp " + [System.Guid]::NewGuid().ToString() + "`r`n"
+		$Script:dscConfigContent += "        {`r`n"
+		$params.Name = $excelSSA.DisplayName
+		$results = Get-TargetResource @params
+		$privateK = $results.Get_Item("PrivateBytesMax")
+		$unusedMax = $results.Get_Item("UnusedObjectAgeMax")
+		<# Nik20170106 - Temporary fix while waiting to hear back from Brian F. on how to properly pass these params. #>
+		if($results.ContainsKey("TrustedFileLocations"))
+		{
+			$results.Remove("TrustedFileLocations")
+		}
+		if($results.ContainsKey("PrivateBytesMax") -and $privateK -eq "-1")
+		{
+			$results.Remove("PrivateBytesMax")
+		}
+		if($results.ContainsKey("UnusedObjectAgeMax") -and $unusedMax -eq "-1")
+		{
+			$results.Remove("UnusedObjectAgeMax")
+		}
+		$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+		$Script:dscConfigContent += "        }`r`n"
+	}
+}
+
+<# Nik20170106 - Read the Designer Settings of either the Site Collection or the Web Application #>
+function Read-SPDesignerSettings($receiver)
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDesignerSettings\MSFT_SPDesignerSettings.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+
+	$params.Url = $receiver[0]
+	$params.SettingsScope = $receiver[1]
+    $results = Get-TargetResource @params
+
+	<# Nik20170106 - The logic here differs from other Read functions due to a bug in the Designer Resource that doesn't properly obtains a reference to the Site Collection. #>
+	if($null -ne $results)
+	{
+		$Script:dscConfigContent += "        SPDesignerSettings " + $receiver[1] + [System.Guid]::NewGuid().ToString() + "`r`n"
+		$Script:dscConfigContent += "        {`r`n"
+		$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+		$Script:dscConfigContent += "        }`r`n"
+	}
+}
+
+function Read-SPDatabaseAAG
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDatabaseAAG\MSFT_SPDatabaseAAG.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+	$databases = Get-SPDatabase
+	foreach($database in $databases)
+	{
+		if($null -ne $database.AvailabilityGroup)
+		{
+			$Script:dscConfigContent += "        SPDatabaseAAG " + [System.Guid]::NewGuid().ToString() + "`r`n"
+			$Script:dscConfigContent += "        {`r`n"
+			$params.DatabaseName = $database.Name
+			$params.AGName = $configDatabase.AvailabilityGroup
+			$results = Get-TargetResource @params
+			$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+			$Script:dscConfigContent += "        }`r`n"
+		}
+	}
+}
+
+function Read-SPConfigWizard
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPConfigWizard\MSFT_SPConfigWizard.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+
+    $Script:dscConfigContent += "        SPConfigWizard " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+	if(!$results.ContainsKey("InstallAccount"))
+    {
+        $results.Add("InstallAccount", "`$CredsFarmAccount")
+    }
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPBlobCacheSettings
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPBlobCacheSettings\MSFT_SPBlobCacheSettings.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+
+    $webApps = Get-SPWebApplication
+    foreach($webApp in $webApps)
+    {
+        $alternateUrls = $webApp.AlternateUrls
+        foreach($alternateUrl in $alternateurls)
+        {
+            $Script:dscConfigContent += "        SPBlobCacheSettings " + [System.Guid]::NewGuid().ToString() + "`r`n"
+            $Script:dscConfigContent += "        {`r`n"
+            $params.WebAppUrl = $webApps.Url
+            $params.Zone = $alternateUrls.Zone
+            $results = Get-TargetResource @params
+            $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+            $Script:dscConfigContent += "        }`r`n"
+        }
+    }
+}
+
+function Read-SPAppManagementServiceApp
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppManagementServiceApp\MSFT_SPAppManagementServiceApp.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $serviceApps = Get-SPServiceApplication | ? {$_.TypeName -eq "App Management Service Application"}
+
+    foreach($appManagement in $serviceApps)
+    {
+        $Script:dscConfigContent += "        SPAppManagementServiceApp " + $appManagement.Name.Replace(" ", "") + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $appManagement.Name
+        $results = Get-TargetResource @params
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
+function Read-SPAppStoreSettings
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppStoreSettings\MSFT_SPAppStoreSettings.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $webApps = Get-SPWebApplication
+
+    foreach($webApp in $webApps)
+    {
+        $Script:dscConfigContent += "        SPAppStoreSettings " + $webApp.Name.Replace(" ", "") + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.WebAppUrl = $webApp.Url
+        $results = Get-TargetResource @params
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
+function Read-SPAntivirusSettings
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAntivirusSettings\MSFT_SPAntivirusSettings.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $Script:dscConfigContent += "        SPAntivirusSettings AntivirusSettings`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"    
+}
+
+function Read-SPDistributedCacheService
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDistributedCacheService\MSFT_SPDistributedCacheService.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -FilePath $module
+    $Script:dscConfigContent += "        SPDistributedCacheService " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+	$params.Name = "DistributedCache"
+    $results = Get-TargetResource @params
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
 }
 
 function Read-SPAlternateUrl

@@ -31,6 +31,10 @@ function Get-DSCParamType
                         {
                             return $_.TypeName.FullName
                         }
+                        elseif($_.TypeName.FullName.ToLower() -eq "Microsoft.Management.Infrastructure.CimInstance")
+                        {
+                            return "System.Collections.Hashtable"
+                        }
                     }                    
                 }
             }
@@ -65,6 +69,33 @@ function Get-DSCBlock
         elseif($paramType -eq "System.Management.Automation.PSCredential" -and $_ -ne "InstallAccount")
         {
             $value = "`$CredsFarmAccount #`"" + ($Params.Item($_)).Username + "`""
+        }
+        elseif($paramType -eq "System.Collections.Hashtable")
+        {
+            $value = "@{"
+            $hash = $Params.Item($_)
+            $hash.Keys | % {
+                try
+                {
+                    $value += $_ + " = `"" + $hash.Item($_) + "`"; "
+                    $value += "}"
+                }
+                catch
+                {
+                    $value = $hash
+                }
+            }
+            
+        }
+        elseif($paramType -eq "System.String[]")
+        {
+            $value = "@("
+            $hash = $Params.Item($_)
+            $hash| % {
+                $value += "`"" + $_ + "`","
+            }
+            $value = $value.Substring(0,$value.Length -1)
+            $value += ")"
         }
         else
         {
@@ -146,6 +177,11 @@ function Get-DSCFakeParameters{
                         elseif($_.TypeName.FullName -eq "System.Management.Automation.Boolean" -or $_.TypeName.FullName -eq "System.Boolean")
                         {
                             $params.Add($paramName.Replace("`$", ""), $true)
+                            $found = $true
+                        }
+                        elseif($_.TypeName.FullName -eq "System.String[]")
+                        {
+                            $params.Add($paramName.Replace("`$", ""),[string]@("1","2"))
                             $found = $true
                         }
                     }
