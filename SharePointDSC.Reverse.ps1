@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.5.0.0 - Nik Charlebois
+ # v1.0.0.30 - Nik Charlebois
  ##############################################################>
 
 <## Script Settings #>
@@ -17,7 +17,7 @@ $Global:spFarmAccount = ""
 function Orchestrator
 {
     Check-Prerequisites
-    $ReverseDSCModule = "ReverseDSC.Util.psm1"
+    $ReverseDSCModule = "ReverseDSC.Core.psm1"
     $module = (Join-Path -Path $PSScriptRoot -ChildPath $ReverseDSCModule -Resolve -ErrorAction SilentlyContinue)
     if($module -eq $null)
     {
@@ -27,14 +27,14 @@ function Orchestrator
     Import-Module -Name $module -Force
 
     $Global:spFarmAccount = Get-Credential -Message "Credentials with Farm Admin Rights" -UserName $env:USERDOMAIN\$env:USERNAME
-    Store-Credentials $Global:spFarmAccount
+    Save-Credentials $Global:spFarmAccount
 
     <# Ensure the user executing the script is not the same as the farm admin account provided #>    
     $Global:spCentralAdmin = Get-SPWebApplication -IncludeCentralAdministration | Where{$_.DisplayName -like '*Central Administration*'}
     $spFarm = Get-SPFarm
     $spServers = $spFarm.Servers
 
-    $totalSteps = 15 + ($spServers.Count * 20)
+    $totalSteps = 25 + ($spServers.Count * 20)
     $currentStep = 1
 
     Write-Progress -Activity "Scanning Operating System Version..." -PercentComplete ($currentStep/$totalSteps*100)
@@ -172,24 +172,60 @@ function Orchestrator
                 Read-SPBlobCacheSettings
                 $currentStep++
 
-				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Configuration Wizard Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Configuration Wizard Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPConfigWizard
                 $currentStep++
 
-				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Database(s) Availability Group Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Database(s) Availability Group Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPDatabaseAAG
                 $currentStep++
 
-				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Distributed Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Distributed Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPDistributedCacheService
                 $currentStep++
 
-				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Excel Services Application Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Excel Services Application Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPExcelServiceApp
                 $currentStep++
 
-				Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Administrator(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Administrator(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPFarmAdministrators
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Solution(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPFarmSolution
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Health Rule(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPHealthAnalyzerRuleState
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning IRM Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPIrmSettings
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Office Online Binding(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPOfficeOnlineServerBinding
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Crawl Rules(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPSearchCrawlRule
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search File Type(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPSearchFileType
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Index Partition(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPSearchIndexPartition
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Result(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPSearchResultSource
+                $currentStep++
+
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Topology...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Read-SPSearchTopology
                 $currentStep++
             }
             else
@@ -409,22 +445,12 @@ function Read-SPProductVersions
 }
 
 <## This function declares the xSPCreateFarm object required to create the config and admin database for the resulting SharePoint Farm. #>
-function Read-SPFarm ($modulePath, $params){
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPCreateFarm\MSFT_SPCreateFarm.psm1")
-        Import-Module $module
-    }
-        
-    $Script:dscConfigContent += "        SPCreateFarm CreateSPFarm`r`n        {`r`n"
+function Read-SPFarm (){
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPCreateFarm\MSFT_SPCreateFarm.psm1")
+    Import-Module $module
 
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module -FarmAccount $Global:spFarmAccount
-    }    
+    $Script:dscConfigContent += "        SPCreateFarm CreateSPFarm`r`n        {`r`n"
+    $params = Get-DSCFakeParameters -ModulePath $module
 
     <# If not SP2016, remove the server role param. #>
     if ((Get-SPDSCInstalledProductVersion).FileMajorPart -ne 16) {
@@ -436,34 +462,66 @@ function Read-SPFarm ($modulePath, $params){
     {
         $params.Remove("InstallAccount")
     }
-
+    $params.FarmAccount = $Global:spFarmAccount
+    $params.Passphrase = $Global:spFarmAccount
     $results = Get-TargetResource @params
 
     <# Remove the default generated PassPhrase and ensure the resulting Configuration Script will prompt user for it. #>
-    $results.Remove("Passphrase");    
+    $results.Remove("Passphrase");
     $Script:dscConfigContent += "            Passphrase = New-Object System.Management.Automation.PSCredential ('Passphrase', `$passphrase);`r`n"
 
     $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
     $Script:dscConfigContent += "`r`n        }`r`n"
+
+    <# SPFarm Feature Section #>
+    $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+    $versionFilter = $spMajorVersion.ToString() + "*"
+    $farmFeatures = Get-SPFeature | ?{$_.Scope -eq "Farm" -and $_.Version -like $versionFilter}
+    $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+    Import-Module $moduleFeature
+    $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+
+    $featuresAlreadyAdded = @()
+    foreach($farmFeature in $farmFeatures)
+    {
+        if(!$featuresAlreadyAdded.Contains($farmFeature.DisplayName))
+        {
+            $featuresAlreadyAdded += $farmFeature.DisplayName
+            $paramsFeature.Name = $farmFeature.DisplayName
+            $paramsFeature.FeatureScope = "Farm"
+            $resultsFeature = Get-TargetResource @paramsFeature
+
+            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+            {
+                $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+
+                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                if(!$resultsFeature.ContainsKey("InstallAccount"))
+                {
+                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                }
+                if($resultsFeature.ContainsKey("InstalAcount"))
+                {
+                    $resultsFeature.Remove("InstalAcount")
+                }
+                #$resultsFeature["Version"] = $farmFeature.Version.
+
+                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                $Script:dscConfigContent += "        }`r`n"
+            }
+            }
+    }
 }
 
 <## This function declares the xSPCreateFarm object required to create the config and admin database for the resulting SharePoint Farm. #>
-function Read-SPJoinFarm ($modulePath, $params){
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPJoinFarm\MSFT_SPJoinFarm.psm1")
-        Import-Module $module
-    }
+function Read-SPJoinFarm (){
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPJoinFarm\MSFT_SPJoinFarm.psm1")
+    Import-Module $module
         
     $Script:dscConfigContent += "        SPJoinFarm JoinFarm`r`n        {`r`n"
-
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module -FarmAccount $Global:spFarmAccount
-    }    
+    $params = Get-DSCFakeParameters -ModulePath $module -FarmAccount $Global:spFarmAccount
 
     <# If not SP2016, remove the server role param. #>
     if ((Get-SPDSCInstalledProductVersion).FileMajorPart -ne 16) {
@@ -488,36 +546,75 @@ function Read-SPJoinFarm ($modulePath, $params){
 
 
 <## This function obtains a reference to every Web Application in the farm and declares their properties (i.e. Port, Associated IIS Application Pool, etc.). #>
-function Read-SPWebApplications ($modulePath, $params){
+function Read-SPWebApplications (){
     Write-Verbose "Reading Information about all Web Applications..."
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWebApplication\MSFT_SPWebApplication.psm1")
-        Import-Module $module
-    }    
-
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWebApplication\MSFT_SPWebApplication.psm1")
+    Import-Module $module
     $spWebApplications = Get-SPWebApplication | Sort-Object -Property Name
-
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module
-    }
+    $params = Get-DSCFakeParameters -ModulePath $module
     
     foreach($spWebApp in $spWebApplications)
     {
-		Import-Module $module
+        Import-Module $module
         $Script:dscConfigContent += "        SPWebApplication " + $spWebApp.Name.Replace(" ", "") + "`r`n        {`r`n"      
 
         $params.Name = $spWebApp.Name
         $results = Get-TargetResource @params
 
-    
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "`r`n        }`r`n"
-		Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication")
+        Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication")
+
+        <# SPWebApplication Feature Section #>
+        $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+        $versionFilter = $spMajorVersion.ToString() + "*"
+        $webAppFeatures = Get-SPFeature | ?{$_.Scope -eq "WebApplication" -and $_.Version -like $versionFilter}
+        $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+        Import-Module $moduleFeature
+        $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+        foreach($webAppFeature in $webAppFeatures)
+        {
+            $paramsFeature.Name = $webAppFeature.DisplayName
+            $paramsFeature.FeatureScope = "WebApplication"
+            $paramsFeature.Url = $spWebApp.Url
+            $resultsFeature = Get-TargetResource @paramsFeature
+
+            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+            {
+                $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+            
+                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                if(!$resultsFeature.ContainsKey("InstallAccount"))
+                {
+                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                }
+                if($resultsFeature.ContainsKey("InstalAcount"))
+                {
+                    $resultsFeature.Remove("InstalAcount")
+                }
+                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                $Script:dscConfigContent += "            DependsOn = `"[SPWebApplication]" + $spWebApp.Name.Replace(" ", "") + "`";`r`n"
+                $Script:dscConfigContent += "        }`r`n"
+            }
+        }
+
+        <# Outgoing Email Setting Region #>
+        $moduleEmail = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPOutgoingEmailSettings\MSFT_SPOutgoingEmailSettings.psm1")
+        Import-Module $moduleEmail
+        $paramsEmail = Get-DSCFakeParameters -ModulePath $moduleEmail
+
+        $Script:dscConfigContent += "        SPOutgoingEmailSettings " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $paramsEmail.WebAppUrl = $spWebApp.Url
+        $resultsEmail = Get-TargetResource @paramsEmail
+        if(!$resultsEmail.ContainsKey("InstallAccount"))
+        {
+            $resultsEmail.Add("InstallAccount", "`$CredsFarmAccount")
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $resultsEmail -ModulePath $moduleEmail
+        $Script:dscConfigContent += "        }`r`n"
     }
 }
 
@@ -536,7 +633,7 @@ function Read-SPServiceApplicationPools ($modulePath, $params){
 
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     foreach($spServiceAppPool in $spServiceAppPools)
@@ -560,7 +657,7 @@ function Read-SPSitesAndWebs ($modulePath, $params){
     {
         $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSite\MSFT_SPSite.psm1")
         Import-Module $module
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
         $siteGuid = [System.Guid]::NewGuid().toString()
         $siteTitle = $spSite.RootWeb.Title
         if($siteTitle -eq $null)
@@ -569,7 +666,7 @@ function Read-SPSitesAndWebs ($modulePath, $params){
         }
         $Script:dscConfigContent += "        SPSite " + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
-        $params.Url = $spsite.Url
+        $params.Url = $spSite.Url
         $results = Get-TargetResource @params
 
         <# If the current Quota ID is 0, it means no quota templates were used. Remove param in that case. #>
@@ -582,14 +679,14 @@ function Read-SPSitesAndWebs ($modulePath, $params){
         $Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spSite.WebApplication.Name.Replace(" ", "") + "`"`r`n"
         $Script:dscConfigContent += "        }`r`n"
 
-		Read-SPDesignerSettings($spSite.Url, "SiteCollection")
+        Read-SPDesignerSettings($spSite.Url, "SiteCollection")
         
         $webs = Get-SPWeb -Limit All -Site $spsite
         foreach($spweb in $webs)
         {
             $moduleWeb = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWeb\MSFT_SPWeb.psm1")
             Import-Module $moduleWeb
-            $paramsWeb = Get-DSCFakeParameters -FilePath $moduleWeb            
+            $paramsWeb = Get-DSCFakeParameters -ModulePath $moduleWeb
             $paramsWeb.Url = $spweb.Url            
             $resultsWeb = Get-TargetResource @paramsWeb
             if(!$resultsWeb.ContainsKey("InstallAccount"))
@@ -600,11 +697,83 @@ function Read-SPSitesAndWebs ($modulePath, $params){
             {
                 $resultsWeb.Remove("PsDscRunAsCredential")
             }
-            $Script:dscConfigContent += "        SPWeb " + $spweb.Title.Replace(" ", "") + "-" + $siteGuid + "`r`n"
+            $Script:dscConfigContent += "        SPWeb " + $spweb.Title.Replace(" ", "") + "-" + [System.Guid]::NewGuid().toString() + "`r`n"
             $Script:dscConfigContent += "        {`r`n"
             $Script:dscConfigContent += Get-DSCBlock -Params $resultsWeb -ModulePath $moduleWeb
             $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
             $Script:dscConfigContent += "        }`r`n"
+
+            <# SPWeb Feature Section #>
+            $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+            $versionFilter = $spMajorVersion.ToString() + "*"
+            $webFeatures = Get-SPFeature | ?{$_.Scope -eq "Web" -and $_.Version -like $versionFilter}
+            $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+            Import-Module $moduleFeature
+            $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+
+            foreach($webFeature in $webFeatures)
+            {
+                $paramsFeature.Name = $webFeature.DisplayName
+                $paramsFeature.FeatureScope = "Web"
+                $paramsFeature.Url = $spWeb.Url
+                $resultsFeature = Get-TargetResource @paramsFeature
+
+                if($resultFeature.Get_Item("Ensure").ToLower() -eq "present")
+                {
+                    $Script:dscConfigContent += "        SPFeature " + $spweb.Title.Replace(" ", "") + "-" + $webFeature.DisplayName + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
+                    $Script:dscConfigContent += "        {`r`n"
+                
+                    <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                       https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                    if(!$resultsFeature.ContainsKey("InstallAccount"))
+                    {
+                        $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                    }
+                    if($resultsFeature.ContainsKey("InstalAcount"))
+                    {
+                        $resultsFeature.Remove("InstalAcount")
+                    }
+
+                    $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                    $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+                    $Script:dscConfigContent += "        }`r`n"
+                }
+            }
+        }
+
+        <# SPSite Feature Section #>
+        $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+        $versionFilter = $spMajorVersion.ToString() + "*"
+        $siteFeatures = Get-SPFeature | ?{$_.Scope -eq "Site" -and $_.Version -like $versionFilter}
+        $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+        Import-Module $moduleFeature
+        $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+        foreach($siteFeature in $siteFeatures)
+        {
+            $paramsFeature.Name = $siteFeature.DisplayName
+            $paramsFeature.FeatureScope = "Site"
+            $paramsFeature.Url = $spSite.Url
+            $resultsFeature = Get-TargetResource @paramsFeature
+
+            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+            {
+                $Script:dscConfigContent += "        SPFeature " + $siteTitle.Replace(" ", "") + "-" + $siteFeature.DisplayName + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+            
+                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                if(!$resultsFeature.ContainsKey("InstallAccount"))
+                {
+                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                }
+                if($resultsFeature.ContainsKey("InstalAcount"))
+                {
+                    $resultsFeature.Remove("InstalAcount")
+                }
+                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+                $Script:dscConfigContent += "        }`r`n"
+            }
         }
     }
 }
@@ -624,7 +793,7 @@ function Read-SPManagedPaths ($modulePath, $params){
 
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
     foreach($spWebApp in $spWebApps)
     {
@@ -679,37 +848,21 @@ function Read-SPManagedPaths ($modulePath, $params){
 }
 
 <## This function retrieves all Managed Accounts in the SharePoint Farm. The Account attribute sets the associated credential variable (each managed account is declared as a variable and the user is prompted to Manually enter the credentials when first executing the script. See function "Set-ObtainRequiredCredentials" for more details on how these variales are set. #>
-function Read-SPManagedAccounts ($modulePath, $params){
-    if($modulePath -ne $null)
-    {
-        $module = Resolve-Path $modulePath
-    }
-    else {
-        $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPManagedAccount\MSFT_SPManagedAccount.psm1")
-        Import-Module $module
-    }    
-
+function Read-SPManagedAccounts (){
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPManagedAccount\MSFT_SPManagedAccount.psm1")
     $managedAccounts = Get-SPManagedAccount
-
-    if($params -eq $null)
-    {
-        $params = Get-DSCFakeParameters -FilePath $module
-    }
 
     foreach($managedAccount in $managedAccounts)
     {
-        $managedCreds = Retrieve-Credentials $managedAccount.UserName
-        $params["Account"] = $managedCreds
-        $Script:dscConfigContent += "        SPManagedAccount " + (Check-Credentials $managedAccount.Username).Replace("$","") + "`r`n"
-        $Script:dscConfigContent += "        {`r`n"
-        $results = Get-TargetResource @params
-        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-        $Script:dscConfigContent += "        }`r`n"
+        $managedCreds = Get-Credentials $managedAccount.UserName
+        $params = @{Account = $managedCreds}
+        $exportContent = Export-TargetResource -ModulePath $module -MandatoryParameters $params
+        $Script:dscConfigContent += $exportContent
     }
 }
 
 <## This function retrieves all Services in the SharePoint farm. It does not care if the service is enabled or not. It lists them all, and simply sets the "Ensure" attribute of those that are disabled to "Absent". #>
-function Read-SPServiceInstance ($modulePath, $params, $Server){
+function Read-SPServiceInstance ($Server){
 
     $serviceInstancesOnCurrentServer = Get-SPServiceInstance | Where{$_.Server.Name -eq $Server} | Sort-Object -Property TypeName
 
@@ -729,7 +882,7 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         {
             $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDistributedCacheService\MSFT_SPDistributedCacheService.psm1")
             Import-Module $module
-            $params = Get-DSCFakeParameters -FilePath $module
+            $params = Get-DSCFakeParameters -ModulePath $module
             $params.Ensure = $ensureValue
             if($params.ServerProvisionOrder -eq $null)
             {
@@ -745,7 +898,7 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         {
             $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPUserProfileSyncService\MSFT_SPUserProfileSyncService.psm1")
             Import-Module $module
-            $params = Get-DSCFakeParameters -FilePath $module
+            $params = Get-DSCFakeParameters -ModulePath $module
             $params.Ensure = $ensureValue
             $params.FarmAccount = $Global:spFarmAccount            
             $results = Get-TargetResource @params
@@ -762,7 +915,7 @@ function Read-SPServiceInstance ($modulePath, $params, $Server){
         {
             $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPServiceInstance\MSFT_SPServiceInstance.psm1")
             Import-Module $module
-            $params = Get-DSCFakeParameters -FilePath $module
+            $params = Get-DSCFakeParameters -ModulePath $module
             if($params.ContainsKey("Name"))
             {
                 $params.Name = $serviceInstance.TypeName
@@ -794,7 +947,7 @@ function Read-DiagnosticLoggingSettings ($modulePath, $params){
    
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
     $diagConfig = Get-SPDiagnosticConfig    
 
@@ -817,7 +970,7 @@ function Read-UsageServiceApplication ($modulePath, $params){
     }
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $usageApplication = Get-SPUsageApplication
@@ -845,7 +998,7 @@ function Read-StateServiceApplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $stateApplications = Get-SPStateServiceApplication
@@ -876,7 +1029,7 @@ function Read-CacheAccounts ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $webApps = Get-SPWebApplication
@@ -910,7 +1063,7 @@ function Read-UserProfileServiceapplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $ups = Get-SPServiceApplication | Where{$_.TypeName -eq "User Profile Service Application"}
@@ -954,7 +1107,7 @@ function Read-SecureStoreServiceApplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $ssa = Get-SPServiceApplication | Where{$_.TypeName -eq "Secure Store Service Application"}
@@ -986,7 +1139,7 @@ function Read-ManagedMetadataServiceApplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $mms = Get-SPServiceApplication | Where{$_.TypeName -eq "Managed Metadata Service"}
@@ -1020,7 +1173,7 @@ function Read-BCSServiceApplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $bcsa = Get-SPServiceApplication | Where{$_.TypeName -eq "Business Data Connectivity Service Application"}
@@ -1052,7 +1205,7 @@ function Read-SearchServiceApplication ($modulePath, $params){
     
     if($params -eq $null)
     {
-        $params = Get-DSCFakeParameters -FilePath $module
+        $params = Get-DSCFakeParameters -ModulePath $module
     }
 
     $searchSA = Get-SPServiceApplication | Where{$_.TypeName -eq "Search Service Application"}
@@ -1071,7 +1224,7 @@ function Read-SearchServiceApplication ($modulePath, $params){
             #region Search Content Sources
             $moduleContentSource = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchContentSource\MSFT_SPSearchContentSource.psm1")
             Import-Module $moduleContentSource
-            $paramsContentSource = Get-DSCFakeParameters -FilePath $moduleContentSource
+            $paramsContentSource = Get-DSCFakeParameters -ModulePath $moduleContentSource
             $contentSources = Get-SPEnterpriseSearchCrawlContentSource -SearchApplication $searchSAInstance.Name
 
             foreach($contentSource in $contentSources)
@@ -1120,7 +1273,7 @@ function Read-SPContentDatabase
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPContentDatabase\MSFT_SPContentDatabase.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $spContentDBs = Get-SPContentDatabase
 
     foreach($spContentDB in $spContentDBs)
@@ -1139,7 +1292,7 @@ function Read-SPAccessServiceApp
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAccessServiceApp\MSFT_SPAccessServiceApp.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $serviceApps = Get-SPServiceApplication
     $serviceApps = $serviceApps | Where-Object -FilterScript { 
             $_.GetType().FullName -eq "Microsoft.Office.Access.Services.MossHost.AccessServicesWebServiceApplication"}
@@ -1169,7 +1322,7 @@ function Read-SPAppCatalog
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppCatalog\MSFT_SPAppCatalog.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $webApps = Get-SPWebApplication
 
     foreach($webApp in $webApps)
@@ -1197,7 +1350,7 @@ function Read-SPAppDomain
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppDomain\MSFT_SPAppDomain.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
 
     $Script:dscConfigContent += "        SPAppDomain " + [System.Guid]::NewGuid().ToString() + "`r`n"
     $Script:dscConfigContent += "        {`r`n"
@@ -1206,17 +1359,266 @@ function Read-SPAppDomain
     $Script:dscConfigContent += "        }`r`n"
 }
 
+function Read-SPSearchFileType
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchFileType\MSFT_SPSearchFileType.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+   $ssa = Get-SPServiceApplication | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Server.Search.Administration.SearchServiceApplication" 
+    }
+
+   $fileFormats = Get-SPEnterpriseSearchFileFormat -SearchApplication $ssa
+
+   foreach($fileFormat in $fileFormats)
+   {
+      $Script:dscConfigContent += "        SPSearchFileType " + [System.Guid]::NewGuid().ToString() + "`r`n"
+      $Script:dscConfigContent += "        {`r`n"
+      $params.ServiceAppName = $ssa.DisplayName
+      $params.FileType = $fileFormat.Identity
+      $results = Get-TargetResource @params
+      $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+      $Script:dscConfigContent += "        }`r`n"
+   }
+}
+
+function Read-SPSearchIndexPartition
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchIndexPartition\MSFT_SPSearchIndexPartition.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    $ssa = Get-SPServiceApplication | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Server.Search.Administration.SearchServiceApplication" 
+    }
+
+    $ssa = Get-SPEnterpriseSearchServiceApplication -Identity $ssa
+    $currentTopology = $ssa.ActiveTopology
+    $indexComponents = Get-SPEnterpriseSearchComponent -SearchTopology $currentTopology | `
+                                Where-Object -FilterScript { 
+                                    $_.GetType().Name -eq "IndexComponent" 
+                                }
+
+    foreach($indexComponent in $indexComponents)
+    {
+        $Script:dscConfigContent += "        SPSearchIndexPartition " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.ServiceAppName = $ssa.DisplayName
+        $params.Index = $indexComponent.IndexPartitionOrdinal
+        $params.Servers = $indexComponent.ServerName
+        $results = Get-TargetResource @params
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
+function Read-SPSearchTopology
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchTopology\MSFT_SPSearchTopology.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    $ssa = Get-SPServiceApplication | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Server.Search.Administration.SearchServiceApplication" 
+    }
+    $Script:dscConfigContent += "        SPSearchTopology " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $params.ServiceAppName = $ssa.DisplayName
+    $results = Get-TargetResource @params
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPSearchResultSource
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchResultSource\MSFT_SPSearchResultSource.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    $ssa = Get-SPServiceApplication | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Server.Search.Administration.SearchServiceApplication" 
+    }
+
+    $ssa = Get-SPEnterpriseSearchServiceApplication -Identity $ssa
+    $searchSiteUrl = $ssa.SearchCenterUrl -replace "/pages"
+    $searchSite = Get-SPWeb -Identity $searchSiteUrl -ErrorAction SilentlyContinue
+
+    if(!$null -eq $searchSite)
+    {
+        $adminNamespace = "Microsoft.Office.Server.Search.Administration"
+        $queryNamespace = "Microsoft.Office.Server.Search.Administration.Query"
+        $objectLevel = [Microsoft.Office.Server.Search.Administration.SearchObjectLevel]
+        $fedManager = New-Object -TypeName "$queryNamespace.FederationManager" `
+                                 -ArgumentList $ssa
+        $searchOwner = New-Object -TypeName "$adminNamespace.SearchObjectOwner" `
+                                  -ArgumentList @(
+                                      $objectLevel::Ssa, 
+                                      $searchSite
+                                  )
+        $resultSources = Get-SPEnterpriseSearchResultSource -SearchApplication $ssa -Owner $searchOwner
+        foreach($resultSource in $resultSources)
+        {
+            $Script:dscConfigContent += "        SPSearchResultSource " + [System.Guid]::NewGuid().ToString() + "`r`n"
+            $Script:dscConfigContent += "        {`r`n"
+            $params.SearchServiceAppName = $ssa.DisplayName
+            $params.Name = $resultSource.Name
+            $results = Get-TargetResource @params
+            if($null -eq $results.Get_Item("ConnectionUrl"))
+            {
+                $results.Remove("ConnectionUrl")
+            }
+            $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+            $Script:dscConfigContent += "        }`r`n"
+        }
+    }
+}
+
+function Read-SPSearchCrawlRule
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPSearchCrawlRule\MSFT_SPSearchCrawlRule.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    $ssa = Get-SPServiceApplication | Where-Object -FilterScript { 
+            $_.GetType().FullName -eq "Microsoft.Office.Server.Search.Administration.SearchServiceApplication" 
+    }
+
+   $crawlRules = Get-SPEnterpriseSearchCrawlRule -SearchApplication $ssa
+
+   foreach($crawlRule in $crawlRules)
+   {
+      $Script:dscConfigContent += "        SPSearchCrawlRule " + [System.Guid]::NewGuid().ToString() + "`r`n"
+      $Script:dscConfigContent += "        {`r`n"
+      $params.ServiceAppName = $ssa.DisplayName
+      $params.Path = $crawlRule.Path
+      $params.Remove("CertificateName")
+      $results = Get-TargetResource @params
+      $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+      $Script:dscConfigContent += "        }`r`n"
+   }
+}
+
+function Read-SPOfficeOnlineServerBinding
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPOfficeOnlineServerBinding\MSFT_SPOfficeOnlineServerBinding.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    $Script:dscConfigContent += "        SPOfficeOnlineServerBinding " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPIrmSettings
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPIrmSettings\MSFT_SPIrmSettings.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+    $Script:dscConfigContent += "        SPIrmSettings " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $Script:dscConfigContent += "        {`r`n"
+    $results = Get-TargetResource @params
+    if(!$results.ContainsKey("InstallAccount"))
+    {
+        $results.Add("InstallAccount", "`$CredsFarmAccount")
+    }
+    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+    $Script:dscConfigContent += "        }`r`n"
+}
+
+function Read-SPHealthAnalyzerRuleState
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPHealthAnalyzerRuleState\MSFT_SPHealthAnalyzerRuleState.psm1")
+    $caWebapp = Get-SPWebApplication -IncludeCentralAdministration `
+            | Where-Object -FilterScript {
+                $_.IsAdministrationWebApplication
+            }
+    $caWeb = Get-SPWeb($caWebapp.Url)
+    $healthRulesList = $caWeb.Lists | Where-Object -FilterScript { 
+        $_.BaseTemplate -eq "HealthRules"
+    }
+
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+
+    foreach($healthRule in $healthRulesList.Items)
+    {
+        $params.Name = $healthRule.Title
+        $Script:dscConfigContent += "        SPHealthAnalyzerRuleState " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $results = Get-TargetResource @params
+        if($results.Get_Item("Schedule") -eq "On Demand")
+        {
+            $results.Schedule = "OnDemandOnly"    
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
+function Read-SPFarmSolution
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFarmSolution\MSFT_SPFarmSolution.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+    $solutions = Get-SPSolution
+    foreach($solution in $solutions)
+    {
+        $Script:dscConfigContent += "        SPFarmSolution " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $solution.Name
+        $results = Get-TargetResource @params
+        if($results.ContainsKey("ContainsGlobalAssembly"))
+        {
+            $results.Remove("ContainsGlobalAssembly")
+        }
+        if(!$results.ContainsKey("InstallAccount"))
+        {
+            $results.Add("InstallAccount", "`$CredsFarmAccount")
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
+function Read-SPFeature
+{
+    $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+    Import-Module $module
+    $params = Get-DSCFakeParameters -ModulePath $module
+    $features = Get-SPFeature
+    foreach($feature in $features)
+    {
+        $Script:dscConfigContent += "        SPFeature " + $feature.DisplayName.Replace(" ", "") + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $solution.Name
+        $results = Get-TargetResource @params
+        if($results.ContainsKey("ContainsGlobalAssembly"))
+        {
+            $results.Remove("ContainsGlobalAssembly")
+        }
+        if(!$results.ContainsKey("InstallAccount"))
+        {
+            $results.Add("InstallAccount", "`$CredsFarmAccount")
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
+}
+
 function Read-SPFarmAdministrators
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFarmAdministrators\MSFT_SPFarmAdministrators.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
-	$params.Remove("MembersToInclude")
-	$params.Remove("MembersToExclude")
+    $params = Get-DSCFakeParameters -ModulePath $module
+    $params.Remove("MembersToInclude")
+    $params.Remove("MembersToExclude")
     $Script:dscConfigContent += "        SPFarmAdministrators " + [System.Guid]::NewGuid().ToString() + "`r`n"
     $Script:dscConfigContent += "        {`r`n"
     $results = Get-TargetResource @params
-	$results.Name = "SPFarmAdministrators"
+    $results.Name = "SPFarmAdministrators"
     $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
     $Script:dscConfigContent += "        }`r`n"
 }
@@ -1225,34 +1627,34 @@ function Read-SPExcelServiceApp
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPExcelServiceApp\MSFT_SPExcelServiceApp.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
 
-	$excelSSA = Get-SPServiceApplication | ?{$_.TypeName -eq "Excel Services Application Web Service Application"}
+    $excelSSA = Get-SPServiceApplication | ?{$_.TypeName -eq "Excel Services Application Web Service Application"}
 
-	if($null -ne $excelSSA)
-	{
-		$Script:dscConfigContent += "        SPExcelServiceApp " + [System.Guid]::NewGuid().ToString() + "`r`n"
-		$Script:dscConfigContent += "        {`r`n"
-		$params.Name = $excelSSA.DisplayName
-		$results = Get-TargetResource @params
-		$privateK = $results.Get_Item("PrivateBytesMax")
-		$unusedMax = $results.Get_Item("UnusedObjectAgeMax")
-		<# Nik20170106 - Temporary fix while waiting to hear back from Brian F. on how to properly pass these params. #>
-		if($results.ContainsKey("TrustedFileLocations"))
-		{
-			$results.Remove("TrustedFileLocations")
-		}
-		if($results.ContainsKey("PrivateBytesMax") -and $privateK -eq "-1")
-		{
-			$results.Remove("PrivateBytesMax")
-		}
-		if($results.ContainsKey("UnusedObjectAgeMax") -and $unusedMax -eq "-1")
-		{
-			$results.Remove("UnusedObjectAgeMax")
-		}
-		$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-		$Script:dscConfigContent += "        }`r`n"
-	}
+    if($null -ne $excelSSA)
+    {
+        $Script:dscConfigContent += "        SPExcelServiceApp " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $params.Name = $excelSSA.DisplayName
+        $results = Get-TargetResource @params
+        $privateK = $results.Get_Item("PrivateBytesMax")
+        $unusedMax = $results.Get_Item("UnusedObjectAgeMax")
+        <# Nik20170106 - Temporary fix while waiting to hear back from Brian F. on how to properly pass these params. #>
+        if($results.ContainsKey("TrustedFileLocations"))
+        {
+            $results.Remove("TrustedFileLocations")
+        }
+        if($results.ContainsKey("PrivateBytesMax") -and $privateK -eq "-1")
+        {
+            $results.Remove("PrivateBytesMax")
+        }
+        if($results.ContainsKey("UnusedObjectAgeMax") -and $unusedMax -eq "-1")
+        {
+            $results.Remove("UnusedObjectAgeMax")
+        }
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
 }
 
 <# Nik20170106 - Read the Designer Settings of either the Site Collection or the Web Application #>
@@ -1260,53 +1662,53 @@ function Read-SPDesignerSettings($receiver)
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDesignerSettings\MSFT_SPDesignerSettings.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
 
-	$params.Url = $receiver[0]
-	$params.SettingsScope = $receiver[1]
+    $params.Url = $receiver[0]
+    $params.SettingsScope = $receiver[1]
     $results = Get-TargetResource @params
 
-	<# Nik20170106 - The logic here differs from other Read functions due to a bug in the Designer Resource that doesn't properly obtains a reference to the Site Collection. #>
-	if($null -ne $results)
-	{
-		$Script:dscConfigContent += "        SPDesignerSettings " + $receiver[1] + [System.Guid]::NewGuid().ToString() + "`r`n"
-		$Script:dscConfigContent += "        {`r`n"
-		$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-		$Script:dscConfigContent += "        }`r`n"
-	}
+    <# Nik20170106 - The logic here differs from other Read functions due to a bug in the Designer Resource that doesn't properly obtains a reference to the Site Collection. #>
+    if($null -ne $results)
+    {
+        $Script:dscConfigContent += "        SPDesignerSettings " + $receiver[1] + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
 }
 
 function Read-SPDatabaseAAG
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDatabaseAAG\MSFT_SPDatabaseAAG.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
-	$databases = Get-SPDatabase
-	foreach($database in $databases)
-	{
-		if($null -ne $database.AvailabilityGroup)
-		{
-			$Script:dscConfigContent += "        SPDatabaseAAG " + [System.Guid]::NewGuid().ToString() + "`r`n"
-			$Script:dscConfigContent += "        {`r`n"
-			$params.DatabaseName = $database.Name
-			$params.AGName = $configDatabase.AvailabilityGroup
-			$results = Get-TargetResource @params
-			$Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-			$Script:dscConfigContent += "        }`r`n"
-		}
-	}
+    $params = Get-DSCFakeParameters -ModulePath $module
+    $databases = Get-SPDatabase
+    foreach($database in $databases)
+    {
+        if($null -ne $database.AvailabilityGroup)
+        {
+            $Script:dscConfigContent += "        SPDatabaseAAG " + [System.Guid]::NewGuid().ToString() + "`r`n"
+            $Script:dscConfigContent += "        {`r`n"
+            $params.DatabaseName = $database.Name
+            $params.AGName = $configDatabase.AvailabilityGroup
+            $results = Get-TargetResource @params
+            $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+            $Script:dscConfigContent += "        }`r`n"
+        }
+    }
 }
 
 function Read-SPConfigWizard
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPConfigWizard\MSFT_SPConfigWizard.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
 
     $Script:dscConfigContent += "        SPConfigWizard " + [System.Guid]::NewGuid().ToString() + "`r`n"
     $Script:dscConfigContent += "        {`r`n"
     $results = Get-TargetResource @params
-	if(!$results.ContainsKey("InstallAccount"))
+    if(!$results.ContainsKey("InstallAccount"))
     {
         $results.Add("InstallAccount", "`$CredsFarmAccount")
     }
@@ -1318,7 +1720,7 @@ function Read-SPBlobCacheSettings
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPBlobCacheSettings\MSFT_SPBlobCacheSettings.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
 
     $webApps = Get-SPWebApplication
     foreach($webApp in $webApps)
@@ -1341,7 +1743,7 @@ function Read-SPAppManagementServiceApp
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppManagementServiceApp\MSFT_SPAppManagementServiceApp.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $serviceApps = Get-SPServiceApplication | ? {$_.TypeName -eq "App Management Service Application"}
 
     foreach($appManagement in $serviceApps)
@@ -1359,7 +1761,7 @@ function Read-SPAppStoreSettings
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAppStoreSettings\MSFT_SPAppStoreSettings.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $webApps = Get-SPWebApplication
 
     foreach($webApp in $webApps)
@@ -1377,7 +1779,7 @@ function Read-SPAntivirusSettings
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAntivirusSettings\MSFT_SPAntivirusSettings.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $Script:dscConfigContent += "        SPAntivirusSettings AntivirusSettings`r`n"
     $Script:dscConfigContent += "        {`r`n"
     $results = Get-TargetResource @params
@@ -1389,10 +1791,10 @@ function Read-SPDistributedCacheService
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDistributedCacheService\MSFT_SPDistributedCacheService.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $Script:dscConfigContent += "        SPDistributedCacheService " + [System.Guid]::NewGuid().ToString() + "`r`n"
     $Script:dscConfigContent += "        {`r`n"
-	$params.Name = "DistributedCache"
+    $params.Name = "DistributedCache"
     $results = Get-TargetResource @params
     $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
     $Script:dscConfigContent += "        }`r`n"
@@ -1402,7 +1804,7 @@ function Read-SPAlternateUrl
 {
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPAlternateUrl\MSFT_SPAlternateUrl.psm1")
     Import-Module $module
-    $params = Get-DSCFakeParameters -FilePath $module
+    $params = Get-DSCFakeParameters -ModulePath $module
     $alternateUrls = Get-SPAlternateUrl
 
     foreach($alternateUrl in $alternateUrls)
@@ -1506,6 +1908,47 @@ function Get-SPReverseDSC()
     <## Wait a couple of seconds, then open our $outputDSCPath in Windows Explorer so we can review the glorious output. ##>
     Start-Sleep 2
     Invoke-Item -Path $OutputDSCPath
+}
+
+<## This function defines variables of type Credential for the resulting DSC Configuraton Script. Each variable declared in this method will result in the user being prompted to manually input credentials when executing the resulting script. #>
+function Set-ObtainRequiredCredentials
+{
+    # Farm Account
+    $localspFarmAccount = $Global:spCentralAdmin.ApplicationPool.ProcessAccount.Name
+    $requiredCredentials = @($localspFarmAccount)
+    $managedAccounts = Get-SPManagedAccount
+    foreach($managedAccount in $managedAccounts)
+    {
+        $requiredCredentials += $managedAccounts.UserName
+    }
+
+    $spServiceAppPools = Get-SPServiceApplicationPool
+    foreach($spServiceAppPool in $spServiceAppPools)
+    {
+        $requiredCredentials += $spServiceAppPools.ProcessAccount.Name
+    }
+
+    $requiredCredentials = $requiredCredentials | Select -Unique
+
+    foreach($account in $requiredCredentials)
+    {
+        $accountName = $account
+        if($account -eq $localspFarmAccount)
+        {
+            $accountName = "FarmAccount"
+        }
+        else
+        {
+            $accountParts = $accountName.Split('\')
+            if($accountParts.Length -gt 1)
+            {
+                $accountName = $accountParts[1]
+            }
+        }
+        $Script:dscConfigContent += "    `$Creds" + $accountName + "= Get-Credential -UserName `"" + $account + "`" -Message `"Credentials for " + $account + "`"`r`n"
+    }
+
+    $Script:dscConfigContent += "`r`n"
 }
 
 function Get-RequiredModules

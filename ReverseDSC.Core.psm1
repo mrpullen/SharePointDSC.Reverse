@@ -5,13 +5,13 @@ function Get-DSCParamType
 {
     [CmdletBinding()]
     param(
-        [parameter(Mandatory = $true)] [System.String] $FilePath,
+        [parameter(Mandatory = $true)] [System.String] $ModulePath,
         [parameter(Mandatory = $true)] [System.String] $ParamName
     )
 
     $tokens = $null 
     $errors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref] $tokens, [ref] $errors)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($ModulePath, [ref] $tokens, [ref] $errors)
     $functions = $ast.FindAll( {$args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $true)
     
     $functions | ForEach-Object {
@@ -31,11 +31,23 @@ function Get-DSCParamType
                         {
                             return $_.TypeName.FullName
                         }
-                        elseif($_.TypeName.FullName.ToLower() -eq "Microsoft.Management.Infrastructure.CimInstance")
+                        elseif($_.TypeName.FullName.ToLower() -eq "microsoft.management.infrastructure.ciminstance")
                         {
                             return "System.Collections.Hashtable"
                         }
-                    }                    
+                        elseif($_.TypeName.FullName.ToLower() -eq "string")
+                        {
+                            return "System.String"
+                        }
+                        elseif($_.TypeName.FullName.ToLower() -eq "boolean")
+                        {
+                            return "System.Boolean"
+                        }
+                        elseif($_.TypeName.FullName.ToLower() -eq "string[]")
+                        {
+                            return "System.String[]"
+                        }
+                    }
                 }
             }
         }
@@ -47,20 +59,28 @@ function Get-DSCParamType
 function Get-DSCBlock
 {
     [CmdletBinding()]
-    param(
-        [System.Collections.Hashtable] $Params,
-        [System.String] $ModulePath
+    param(        
+        [System.String] $ModulePath,
+        [System.Collections.Hashtable] $Params
     )
 
     $dscBlock = ""
     $foundInstallAccount = $false
     $Params.Keys | % { 
-        $paramType = Get-DSCParamType -FilePath $ModulePath -ParamName "`$$_"
+        $paramName = $_
+        $paramType = Get-DSCParamType -ModulePath $ModulePath -ParamName "`$$_"
 
         $value = $null
         if($paramType -eq "System.String")
         {
-            $value = "`"" + $Params.Item($_) + "`""
+            if(!$null -eq $Params.Item($_))
+            {
+                $value = "`"" + $Params.Item($_).ToString().Replace("`"", "```"") + "`""
+            }
+            else
+            {
+                $value = "`"" + $Params.Item($_) + "`""
+            }
         }
         elseif($paramType -eq "System.Boolean")
         {
@@ -94,7 +114,10 @@ function Get-DSCBlock
             $hash| % {
                 $value += "`"" + $_ + "`","
             }
-            $value = $value.Substring(0,$value.Length -1)
+            if($value.Length -gt 2)
+            {
+                $value = $value.Substring(0,$value.Length -1)
+            }
             $value += ")"
         }
         else
@@ -124,15 +147,14 @@ function Get-DSCBlock
 function Get-DSCFakeParameters{
     [CmdletBinding()]
     param(
-        [parameter(Mandatory = $true)] [System.String] $FilePath,
-        [parameter(Mandatory = $false)] [System.Management.Automation.PSCredential] $FarmAccount
+        [parameter(Mandatory = $true)] [System.String] $ModulePath
     )
 
     $params = @{}
 
     $tokens = $null 
     $errors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($FilePath, [ref] $tokens, [ref] $errors)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($ModulePath, [ref] $tokens, [ref] $errors)
     $functions = $ast.FindAll( {$args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst]}, $true)
     
     $functions | ForEach-Object {
@@ -144,7 +166,7 @@ function Get-DSCFakeParameters{
 
             $parameters = $functionAst.FindAll( {$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
             $parameters | ForEach-Object {   
-                $paramName = $_.Name.Extent.Text             
+                $paramName = $_.Name.Extent.Text
                 $attributes = $_.Attributes
                 $found = $false
 
@@ -159,7 +181,7 @@ function Get-DSCFakeParameters{
                 $attributes | ForEach-Object{
                     if(!$found)
                     {
-                        if($_.TypeName.FullName -eq "System.String")
+                        if($_.TypeName.FullName -eq "System.String" -or $_.TypeName.FullName -eq "String")
                         {
                             $params.Add($paramName.Replace("`$", ""), "*")
                             $found = $true
@@ -171,15 +193,15 @@ function Get-DSCFakeParameters{
                         }
                         elseif($_.TypeName.FullName -eq "System.Management.Automation.PSCredential")
                         {
-                            $params.Add($paramName.Replace("`$", ""), $FarmAccount)                            
+                            $params.Add($paramName.Replace("`$", ""), $null)                            
                             $found = $true
                         }
-                        elseif($_.TypeName.FullName -eq "System.Management.Automation.Boolean" -or $_.TypeName.FullName -eq "System.Boolean")
+                        elseif($_.TypeName.FullName -eq "System.Management.Automation.Boolean" -or $_.TypeName.FullName -eq "System.Boolean" -or $_.TypeName.FullName -eq "Boolean")
                         {
                             $params.Add($paramName.Replace("`$", ""), $true)
                             $found = $true
                         }
-                        elseif($_.TypeName.FullName -eq "System.String[]")
+                        elseif($_.TypeName.FullName -eq "System.String[]" -or $_.TypeName.FullName -eq "String[]")
                         {
                             $params.Add($paramName.Replace("`$", ""),[string]@("1","2"))
                             $found = $true
@@ -192,7 +214,66 @@ function Get-DSCFakeParameters{
      return $params
 }
 
-function Retrieve-Credentials([string] $userName)
+function Export-TargetResource()
+{
+    [CmdletBinding()]
+    param(
+        [parameter(Mandatory = $true)] [System.String] $ModulePath,
+        [parameter(Mandatory = $true)] [System.Collections.Hashtable] $MandatoryParameters,
+        [parameter(Mandatory = $false)] [System.String] $DependsOnClause
+    )
+
+    $friendlyName = Get-ResourceFriendlyName -ModulePath $ModulePath
+    $fakeParameters = Get-DSCFakeParameters -ModulePath $ModulePath
+
+    <# Nik20170109 - Replace each Fake Parameter by the ones received as function arguments #>
+    foreach($fakeParameter in $fakeParameters.Keys)
+    {
+        if($MandatoryParameters.ContainsKey($fakeParameter))
+        {
+            $fakeParameters[$fakeParameter] = $MandatoryParameters.Get_Item($fakeParameter)
+        }
+    }
+
+    Import-Module $ModulePath
+    $results = Get-TargetResource @fakeParameters
+    
+    $exportContent = "        " + $friendlyName + " " + [System.Guid]::NewGuid().ToString() + "`r`n"
+    $exportContent += "        {`r`n"
+    $exportContent += Get-DSCBlock -ModulePath $ModulePath -Params $results
+    if($null -ne $DependsOnClause)
+    {
+        $exportContent += $DependsOnClause
+    }
+    $exportContent += "        }`r`n"
+    return $exportContent
+}
+
+function Get-ResourceFriendlyName()
+{
+    [CmdletBinding()]
+    param(
+        [parameter(Mandatory = $true)] [System.String] $ModulePath
+    )
+
+    $tokens = $null 
+    $errors = $null
+    $schemaPath = $ModulePath.Replace(".psm1", ".schema.mof")
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($schemaPath, [ref] $tokens, [ref] $errors)
+
+    for($i = 0; $i -lt $tokens.Length; $i++)
+    {
+        if($tokens[$i].Text.ToLower() -eq "friendlyname" -and ($i+2) -le $tokens.Length)
+        {
+            return $tokens[$i+2].Text.Replace("`"", "")
+        }
+    }
+    return $null
+}
+
+<# Region Helper Methods #>
+<## This function receives a user name and returns the "Display Name" for that user. This function is primarly used to identify the Farm (System) account. #>
+function Get-Credentials([string] $userName)
 {
     if($Global:CredsRepo.Contains($userName.ToLower()))
     {
@@ -206,21 +287,7 @@ function Retrieve-Credentials([string] $userName)
     }
 }
 
-function Store-Credentials([System.Management.Automation.PSCredential] $creds)
-{
-    if($Global:CredsRepo.Contains($creds.UserName.ToLower()))
-    {
-        return $true
-    }
-    else
-    {
-        $Global:CredsRepo.Add($creds.UserName.ToLower(), $creds)
-        return $false
-    }
-}
-
-<## This function receives a user name and returns the "Display Name" for that user. This function is primarly used to identify the Farm (System) account. #>
-function Check-Credentials([string] $userName)
+function Resolve-Credentials([string] $userName)
 {
     if($userName -eq $Script:spCentralAdmin.ApplicationPool.ProcessAccount.Name)
     {
@@ -238,43 +305,15 @@ function Check-Credentials([string] $userName)
     return $userName
 }
 
-<## This function defines variables of type Credential for the resulting DSC Configuraton Script. Each variable declared in this method will result in the user being prompted to manually input credentials when executing the resulting script. #>
-function Set-ObtainRequiredCredentials
+function Save-Credentials([System.Management.Automation.PSCredential] $creds)
 {
-    # Farm Account
-    $localspFarmAccount = $Global:spCentralAdmin.ApplicationPool.ProcessAccount.Name
-    $requiredCredentials = @($localspFarmAccount)
-    $managedAccounts = Get-SPManagedAccount
-    foreach($managedAccount in $managedAccounts)
+    if($Global:CredsRepo.Contains($creds.UserName.ToLower()))
     {
-        $requiredCredentials += $managedAccounts.UserName
+        return $true
     }
-
-    $spServiceAppPools = Get-SPServiceApplicationPool
-    foreach($spServiceAppPool in $spServiceAppPools)
+    else
     {
-        $requiredCredentials += $spServiceAppPools.ProcessAccount.Name
+        $Global:CredsRepo.Add($creds.UserName.ToLower(), $creds)
+        return $false
     }
-
-    $requiredCredentials = $requiredCredentials | Select -Unique
-
-    foreach($account in $requiredCredentials)
-    {
-        $accountName = $account
-        if($account -eq $localspFarmAccount)
-        {
-            $accountName = "FarmAccount"
-        }
-        else
-        {
-            $accountParts = $accountName.Split('\')
-            if($accountParts.Length -gt 1)
-            {
-                $accountName = $accountParts[1]
-            }
-        }
-        $Script:dscConfigContent += "    `$Creds" + $accountName + "= Get-Credential -UserName `"" + $account + "`" -Message `"Credentials for " + $account + "`"`r`n"
-    }
-
-    $Script:dscConfigContent += "`r`n"
 }
