@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.0.0.30 - Nik Charlebois
+ # v1.0.0.31 - Nik Charlebois
  ##############################################################>
 
 <## Script Settings #>
@@ -398,14 +398,7 @@ function Set-ConfigurationData
 function Set-Imports
 {
     $Script:dscConfigContent += "    Import-DscResource -ModuleName PSDesiredStateConfiguration`r`n"
-    if($PSVersionTable.PSVersion.Major -eq 5)
-    {
-        $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC -ModuleVersion '$SPDSCVersion'`r`n"
-    }
-    else
-    {
-        $Script:dscConfigContent += "    Import-DscResource -ModuleName @{ModuleName=`"SharePointDSC`";ModuleVersion=`"$SPDSCVersion`"}`r`n"
-    }
+    $Script:dscConfigContent += "    Import-DscResource -ModuleName SharePointDSC`r`n"
 }
 
 <## This function really is optional, but helps provide valuable information about the various software components installed in the current SharePoint farm (i.e. Cummulative Updates, Language Packs, etc.). #>
@@ -521,15 +514,15 @@ function Read-SPJoinFarm (){
     Import-Module $module
         
     $Script:dscConfigContent += "        SPJoinFarm JoinFarm`r`n        {`r`n"
-    $params = Get-DSCFakeParameters -ModulePath $module -FarmAccount $Global:spFarmAccount
+    $params = Get-DSCFakeParameters -ModulePath $module
 
     <# If not SP2016, remove the server role param. #>
-    if ((Get-SPDSCInstalledProductVersion).FileMajorPart -ne 16) {
+    if ((Get-SPDSCInstalledProductVersion).FileMajorPart -ne 16 -and $params.ContainsKey("ServerRole")) {
         $params.Remove("ServerRole")
     }
 
     <# Can't have both the InstallAccount and PsDscRunAsCredential variables present. Remove InstallAccount if both are there. #>
-    if($params.Contains("InstallAccount"))
+    if($params.ContainsKey("InstallAccount"))
     {
         $params.Remove("InstallAccount")
     }
@@ -563,7 +556,7 @@ function Read-SPWebApplications (){
 
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "`r`n        }`r`n"
-        Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication")
+        Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication", $spWebApp.Name.Replace(" ", ""))
 
         <# SPWebApplication Feature Section #>
         $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
@@ -605,16 +598,20 @@ function Read-SPWebApplications (){
         Import-Module $moduleEmail
         $paramsEmail = Get-DSCFakeParameters -ModulePath $moduleEmail
 
-        $Script:dscConfigContent += "        SPOutgoingEmailSettings " + [System.Guid]::NewGuid().ToString() + "`r`n"
-        $Script:dscConfigContent += "        {`r`n"
         $paramsEmail.WebAppUrl = $spWebApp.Url
         $resultsEmail = Get-TargetResource @paramsEmail
-        if(!$resultsEmail.ContainsKey("InstallAccount"))
+        if("" -ne $resultEmail["SMTPServer"])
         {
-            $resultsEmail.Add("InstallAccount", "`$CredsFarmAccount")
+            if(!$resultsEmail.ContainsKey("InstallAccount"))
+            {
+                $resultsEmail.Add("InstallAccount", "`$CredsFarmAccount")
+            }
+            $Script:dscConfigContent += "        SPOutgoingEmailSettings " + [System.Guid]::NewGuid().ToString() + "`r`n"
+            $Script:dscConfigContent += "        {`r`n"
+            $Script:dscConfigContent += Get-DSCBlock -Params $resultsEmail -ModulePath $moduleEmail
+            $Script:dscConfigContent += "            DependsOn = `"[SPWebApplication]" + $spWebApp.Name.Replace(" ", "") + "`";`r`n"
+            $Script:dscConfigContent += "        }`r`n"
         }
-        $Script:dscConfigContent += Get-DSCBlock -Params $resultsEmail -ModulePath $moduleEmail
-        $Script:dscConfigContent += "        }`r`n"
     }
 }
 
@@ -648,7 +645,7 @@ function Read-SPServiceApplicationPools ($modulePath, $params){
 }
 
 <## This function retrieves a list of all site collections, no matter what Web Application they belong to. The Url attribute helps the xSharePoint DSC Resource determine what Web Application they belong to. #>
-function Read-SPSitesAndWebs ($modulePath, $params){
+function Read-SPSitesAndWebs (){
     
     $spSites = Get-SPSite -Limit All
     $siteGuid = $null
@@ -674,7 +671,18 @@ function Read-SPSitesAndWebs ($modulePath, $params){
         {
             $results.Remove("QuotaTemplate")
         }
-
+        if($null -eq $results.Get_Item("SecondaryOwnerAlias"))
+        {
+            $results.Remove("SecondaryOwnerAlias")
+        }
+        if($null -eq $results.Get_Item("SecondaryEmail"))
+        {
+            $results.Remove("SecondaryEmail")
+        }
+        if($null -eq $results.Get_Item("OwnerEmail") -or "" -eq $results.Get_Item("OwnerEmail"))
+        {
+            $results.Remove("OwnerEmail")
+        }
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spSite.WebApplication.Name.Replace(" ", "") + "`"`r`n"
         $Script:dscConfigContent += "        }`r`n"
@@ -1218,6 +1226,13 @@ function Read-SearchServiceApplication ($modulePath, $params){
             $Script:dscConfigContent += "        {`r`n"
             $params.Name = $searchSAInstance.Name
             $results = Get-TargetResource @params
+            if($results.Get_Item("CloudIndex") -eq $false)
+            {
+                $results.Remove("CloudIndex")
+            }
+            <# Nik20170111 - Fix a bug in 1.5.0.0 where DatabaseName and DatabaseServer is not properly returned #>
+            $results["DatabaseName"] = $searchSAInstance.SearchAdminDatabase.Name
+            $results["DatabaseServer"] = $searchSAInstance.SearchAdminDatabase.Server.Name
             $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
             $Script:dscConfigContent += "        }`r`n"
 
@@ -1673,7 +1688,16 @@ function Read-SPDesignerSettings($receiver)
     {
         $Script:dscConfigContent += "        SPDesignerSettings " + $receiver[1] + [System.Guid]::NewGuid().ToString() + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
+        <#if($receiver[1] -eq "SiteCollection" -and $results.ContainsKey("InstallAccount"))
+        {
+            $results.Add("PsDscRunAsAccount", $results.Get_Item("InstallAccount"))
+            $results.Remove("InstallAccount")
+        }#>
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        if($receiver.Length -eq 3)
+        {
+            $Script:dscConfigContent += "            DependsOn = `"[SP" + $receiver[1].Replace("Collection", "") + "]" + $receiver[2] + "`";`r`n"
+        }
         $Script:dscConfigContent += "        }`r`n"
     }
 }
@@ -1751,7 +1775,12 @@ function Read-SPAppManagementServiceApp
         $Script:dscConfigContent += "        SPAppManagementServiceApp " + $appManagement.Name.Replace(" ", "") + [System.Guid]::NewGuid().ToString() + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
         $params.Name = $appManagement.Name
+
         $results = Get-TargetResource @params
+        <# Nik20170111 - Fixes a bug in 1.5.0.0 where the Database Name and Server is not properly returned; #>
+        $results.DatabaseName = $appManagement.Databases.Name
+        $results.DatabaseServer = $appManagement.Databases.Server.Name
+
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "        }`r`n"
     }
