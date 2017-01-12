@@ -174,7 +174,7 @@ function Get-DSCFakeParameters{
                 $attributes | ForEach-Object{
                     if($_.TypeName.FullName -eq "ValidateSet")
                     {
-                        $params.Add($paramName.Replace("`$", ""), $_.PositionalArguments[0].ToString().Replace("`"", ""))
+                        $params.Add($paramName.Replace("`$", ""), $_.PositionalArguments[0].ToString().Replace("`"", "").Replace("'",""))
                         $found = $true
                     }
                 }
@@ -218,25 +218,26 @@ function Export-TargetResource()
 {
     [CmdletBinding()]
     param(
-        [parameter(Mandatory = $true)] [System.String] $ModulePath,
+        [parameter(Mandatory = $true)] [System.String] $ResourceName,
         [parameter(Mandatory = $true)] [System.Collections.Hashtable] $MandatoryParameters,
         [parameter(Mandatory = $false)] [System.String] $DependsOnClause
     )
-
+    $ModulePath = (Get-DscResource $ResourceName | select Path).Path.ToString()
     $friendlyName = Get-ResourceFriendlyName -ModulePath $ModulePath
     $fakeParameters = Get-DSCFakeParameters -ModulePath $ModulePath
 
     <# Nik20170109 - Replace each Fake Parameter by the ones received as function arguments #>
+    $finalParams = @{}
     foreach($fakeParameter in $fakeParameters.Keys)
     {
         if($MandatoryParameters.ContainsKey($fakeParameter))
         {
-            $fakeParameters[$fakeParameter] = $MandatoryParameters.Get_Item($fakeParameter)
+            $finalParams.Add($fakeParameter,$MandatoryParameters.Get_Item($fakeParameter))
         }
     }
 
     Import-Module $ModulePath
-    $results = Get-TargetResource @fakeParameters
+    $results = Get-TargetResource @finalParams
     
     $exportContent = "        " + $friendlyName + " " + [System.Guid]::NewGuid().ToString() + "`r`n"
     $exportContent += "        {`r`n"
