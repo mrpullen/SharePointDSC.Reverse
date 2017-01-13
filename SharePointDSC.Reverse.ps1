@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.0.0.33 - Nik Charlebois
+ # v1.0.0.35 - Nik Charlebois
  ##############################################################>
 
 <## Script Settings #>
@@ -220,7 +220,7 @@ function Orchestrator
                 Read-SPSearchIndexPartition
                 $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Result(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Result Source(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
                 Read-SPSearchResultSource
                 $currentStep++
 
@@ -259,12 +259,13 @@ function Check-Prerequisites
     <# Validate the PowerShell Version #>
     if($psVersionTable.PSVersion.Major -eq 4)
     {
-        Write-Host "PowerShell v4 detected. While this script will work just fine with v4, it is highly recommended you upgrade to PowerShell v5 to get the most out of DSC" -BackgroundColor Yellow -ForegroundColor Black
+        Write-Host "`r`nI100"  -BackgroundColor Cyan -ForegroundColor Black -NoNewline
+        Write-Host "    - PowerShell v4 detected. While this script will work just fine with v4, it is highly recommended you upgrade to PowerShell v5 to get the most out of DSC"
     }
     elseif($psVersionTable.PSVersion.Major -lt 4)
     {
-        Write-Host "E100"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
-        Write-Host "We are sorry, PowerShell v3 or lower is not supported by the Reverse DSC Engine"
+        Write-Host "`r`nE100"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+        Write-Host "    - We are sorry, PowerShell v3 or lower is not supported by the Reverse DSC Engine"
         exit
     }
 
@@ -291,14 +292,16 @@ function Check-Prerequisites
                 }
                 else
                 {
-                    Write-Host "E101"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
-                    Write-Host "We are sorry, but the script cannot continue without the SharePoint DSC module installed."
+                    Write-Host "`r`nE101"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+                    Write-Host "   - We are sorry, but the script cannot continue without the SharePoint DSC module installed."
                     exit
                 }
             }
             else
             {
-                Write-Host "W101: We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script" -BackgroundColor Yellow -ForegroundColor Black
+                Write-Host "`r`nW101"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+                Write-Host "   - We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
+                $Script:SPDSCPath = $moduleObject[0].Module.Path.ToLower().Replace("sharepointdsc.psd1", "").Replace("\", "/")
             }
         }
     }
@@ -309,14 +312,14 @@ function Check-Prerequisites
         $cmd = Get-Command Install-Module -EA SilentlyContinue
         if(!$cmd)
         {
-            Write-Host "W102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
-            Write-Host "We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
+            Write-Host "`r`nW102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+            Write-Host "   - We could not find the PackageManagement modules on the machine. Please make sure you download and install it at https://www.microsoft.com/en-us/download/details.aspx?id=51451 before executing this script"
         }
         $moduleObject = Get-DSCResource | ?{$_.Module -like "SharePointDsc"}
         if(!$moduleObject)
         {
-            Write-Host "E103"  -BackgroundColor Red -ForegroundColor Black -NoNewline
-            Write-Host "Could not find the SharePointDSC Module Resource on the current server."
+            Write-Host "`r`nE103"  -BackgroundColor Red -ForegroundColor Black -NoNewline
+            Write-Host "    - Could not find the SharePointDSC Module Resource on the current server."
             exit;
         }
         $Script:SPDSCPath = $moduleObject[0].Module.Path.ToLower().Replace("sharepointdsc.psd1", "").Replace("\", "/")
@@ -602,7 +605,7 @@ function Read-SPWebApplications (){
 
         $paramsEmail.WebAppUrl = $spWebApp.Url
         $resultsEmail = Get-TargetResource @paramsEmail
-        if("" -ne $resultsEmail["SMTPServer"])
+        if($null -ne $resultsEmail["SMTPServer"] -and "" -ne $resultsEmail["SMTPServer"])
         {
             if(!$resultsEmail.ContainsKey("InstallAccount"))
             {
@@ -929,14 +932,13 @@ function Read-SPServiceInstance ($Server){
             $params.Ensure = $ensureValue
             $params.FarmAccount = $Global:spFarmAccount            
             $results = Get-TargetResource @params
-            if($ensureValue -eq "Absent")
-            {
-                $results.UserProfileServiceAppName = "TBD"
+            if($ensureValue -eq "Present")
+            {            
+                $Script:dscConfigContent += "        SPUserProfileSyncService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+                $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+                $Script:dscConfigContent += "        }`r`n"
             }
-            $Script:dscConfigContent += "        SPUserProfileSyncService " + $serviceInstance.TypeName.Replace(" ", "") + "Instance`r`n"
-            $Script:dscConfigContent += "        {`r`n"
-            $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-            $Script:dscConfigContent += "        }`r`n"
         }
         else
         {
@@ -1104,8 +1106,8 @@ function Read-UserProfileServiceapplication ($modulePath, $params){
             $pm = new-object Microsoft.Office.Server.UserProfiles.UserProfileManager($context)
         }
         catch{
-            $Script:dscConfigContent += "        <# WARNING: It appears the farm account doesn't have Full Control to the User Profile Service Aplication. This is currently preventing the script from determining the exact path for the MySite Host (if configured). Please ensure the Farm account is granted Full Control on the User Profile Service Application. #>`r`n"
-            Write-Host "WARNING - Farm Account does not have Full Control on the User Profile Service Application." -BackgroundColor Yellow -ForegroundColor Black
+                Write-Host "`r`nW102"  -BackgroundColor Yellow -ForegroundColor Black -NoNewline
+                Write-Host "   - Farm Account does not have Full Control on the User Profile Service Application."
         }
 
         if($ups -ne $null)
@@ -1615,8 +1617,12 @@ function Read-SPFarmSolution
     Import-Module $module
     $params = Get-DSCFakeParameters -ModulePath $module
     $solutions = Get-SPSolution
+    $farm = Get-SPFarm
     foreach($solution in $solutions)
     {
+        $file = $farm.Solutions.Item($solution.Name).SolutionFile
+        $filePath = (Get-Item -Path ".\" -Verbose).FullName + "\" + $solution.Name
+        $file.SaveAs($filePath)
         $Script:dscConfigContent += "        SPFarmSolution " + [System.Guid]::NewGuid().ToString() + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
         $params.Name = $solution.Name
@@ -1629,6 +1635,7 @@ function Read-SPFarmSolution
         {
             $results.Add("InstallAccount", "`$CredsFarmAccount")
         }
+        $results["LiteralPath"] = $filePath
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "        }`r`n"
     }
@@ -2157,6 +2164,15 @@ function Get-RequiredModules
     }
 }
 
-Get-RequiredModules
 Add-PSSnapin Microsoft.SharePoint.PowerShell -EA SilentlyContinue
-Get-SPReverseDSC
+$sharePointSnapin = Get-PSSnapin | ?{$_.Name -eq "Microsoft.SharePoint.PowerShell"}
+if($null -ne $sharePointSnapin)
+{
+    Get-RequiredModules
+    Get-SPReverseDSC
+}
+else
+{
+    Write-Host "`r`nE101"  -BackgroundColor Red -ForegroundColor Black -NoNewline
+    Write-Host "    - We couldn't detect a SharePoint instalation on this machine. Please execute the SharePoint Reverse DSC script on an existing SharePoint server."
+}
