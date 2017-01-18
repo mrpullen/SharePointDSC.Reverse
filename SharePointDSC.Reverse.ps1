@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.0.0.37 - Nik Charlebois
+ # v1.0.0.38 - Nik Charlebois
  ##############################################################>
 
 <## Script Settings #>
@@ -33,35 +33,26 @@ function Orchestrator
     $spFarm = Get-SPFarm
     $spServers = $spFarm.Servers
 
-    $totalSteps = 46 + $spServers.Count
-    $currentStep = 1
-
-    Write-Progress -Activity "Scanning Operating System Version..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Scanning Operating System Version..." -BackgroundColor DarkGreen -ForegroundColor White
     Read-OperatingSystemVersion
-    $currentStep++
 
-    Write-Progress -Activity "Scanning SQL Server Version..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Scanning SQL Server Version..." -BackgroundColor DarkGreen -ForegroundColor White
     Read-SQLVersion
-    $currentStep++
 
-    Write-Progress -Activity "Scanning Patch Levels..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Scanning Patch Levels..." -BackgroundColor DarkGreen -ForegroundColor White
     Read-SPProductVersions
-    $currentStep++
 
     $Script:dscConfigContent += "Configuration SharePointFarm`r`n"
     $Script:dscConfigContent += "{`r`n"
 
-    Write-Progress -Activity "Configuring Credentials..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Configuring Credentials..." -BackgroundColor DarkGreen -ForegroundColor White
     Set-ObtainRequiredCredentials
-    $currentStep++
 
-    Write-Progress -Activity "Configuring Dependencies..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Configuring Dependencies..." -BackgroundColor DarkGreen -ForegroundColor White
     Set-Imports
-    $currentStep++
 
-    Write-Progress -Activity "Configuring Variables..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "Configuring Variables..." -BackgroundColor DarkGreen -ForegroundColor White
     Set-VariableSection
-    $currentStep++
 
     $serverNumber = 1
     foreach($spServer in $spServers)
@@ -75,181 +66,140 @@ function Orchestrator
                SPJoinFarm one. #>
             if($serverNumber -eq 1)
             {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning the SharePoint Farm..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPFarm
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Web Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Web Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPWebApplications
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Alternate Url(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Alternate Url(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAlternateUrl
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Path(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Managed Path(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPManagedPaths
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Managed Account(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPManagedAccounts
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Application Pool(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Application Pool(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPServiceApplicationPools
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Content Database(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Content Database(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPContentDatabase
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Site Collection(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Site Collection(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSitesAndWebs
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Diagnostic Logging Settings...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Diagnostic Logging Settings..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-DiagnosticLoggingSettings
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Usage Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Usage Service Application..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-UsageServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning State Service Application...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning State Service Application..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-StateServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning User Profile Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning User Profile Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-UserProfileServiceapplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Cache Account(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Cache Account(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-CacheAccounts
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Secure Store Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Secure Store Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SecureStoreServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Business Connectivity Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Business Connectivity Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-BCSServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Search Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SearchServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Managed Metadata Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning Managed Metadata Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-ManagedMetadataServiceApplication
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Access Service Application(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Access Service Application(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAccessServiceApp
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Antivirus Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Antivirus Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAntivirusSettings
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Catalog Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning App Catalog Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAppCatalog
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Domain Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning App Domain Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAppDomain
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Management Service App Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning App Management Service App Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAppManagementServiceApp
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning App Store Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning App Store Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPAppStoreSettings
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Blob Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Blob Cache Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPBlobCacheSettings
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Configuration Wizard Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Configuration Wizard Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPConfigWizard
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Database(s) Availability Group Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Database(s) Availability Group Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPDatabaseAAG
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Distributed Cache Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Distributed Cache Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPDistributedCacheService
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Excel Services Application Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Excel Services Application Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPExcelServiceApp
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Administrator(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Farm Administrator(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPFarmAdministrators
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Farm Solution(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Farm Solution(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPFarmSolution
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Health Rule(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Health Rule(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPHealthAnalyzerRuleState
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning IRM Settings(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning IRM Settings(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPIrmSettings
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Office Online Binding(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Office Online Binding(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPOfficeOnlineServerBinding
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Crawl Rules(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Crawl Rules(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSearchCrawlRule
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search File Type(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Search File Type(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSearchFileType
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Index Partition(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Search Index Partition(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSearchIndexPartition
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Result Source(s)...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Search Result Source(s)..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSearchResultSource
-                $currentStep++
 
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Search Topology...") -PercentComplete ($currentStep/$totalSteps*100)                
+                Write-Host "["$spServer.Name"] Scanning Search Topology..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPSearchTopology
-                $currentStep++
             }
             else
             {
-                Write-Progress -Activity ("[" + $spServer.Name + "] Scanning the SharePoint Farm...") -PercentComplete ($currentStep/$totalSteps*100)
+                Write-Host "["$spServer.Name"] Scanning the SharePoint Farm..." -BackgroundColor DarkGreen -ForegroundColor White
                 Read-SPJoinFarm
-                $currentStep++
             }
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Scanning Service Instance(s)...") -PercentComplete ($currentStep/$totalSteps*100)
+            Write-Host "["$spServer.Name"] Scanning Service Instance(s)..." -BackgroundColor DarkGreen -ForegroundColor White
             Read-SPServiceInstance -Server $spServer.Name
-            $currentStep++
 
-            Write-Progress -Activity ("[" + $spServer.Name + "] Configuring Local Configuration Manager (LCM)...") -PercentComplete ($currentStep/$totalSteps*100)
+            Write-Host "["$spServer.Name"] Configuring Local Configuration Manager (LCM)..." -BackgroundColor DarkGreen -ForegroundColor White
             Set-LCM
-            $currentStep++
 
             $Script:dscConfigContent += "`r`n    }`r`n"
             $serverNumber++
         }
     }    
     $Script:dscConfigContent += "`r`n}`r`n"
-    Write-Progress -Activity "[$spServer.Name] Setting Configuration Data..." -PercentComplete ($currentStep/$totalSteps*100)
+    Write-Host "[$spServer.Name] Setting Configuration Data..." -BackgroundColor DarkGreen -ForegroundColor White
     Set-ConfigurationData
-    $currentStep++
+
     $Script:dscConfigContent += "SharePointFarm -ConfigurationData `$ConfigData"
 }
 
