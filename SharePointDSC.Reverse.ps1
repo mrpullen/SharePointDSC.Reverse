@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.0.0.35 - Nik Charlebois
+ # v1.0.0.37 - Nik Charlebois
  ##############################################################>
 
 <## Script Settings #>
@@ -29,7 +29,6 @@ function Orchestrator
     $Global:spFarmAccount = Get-Credential -Message "Credentials with Farm Admin Rights" -UserName $env:USERDOMAIN\$env:USERNAME
     Save-Credentials $Global:spFarmAccount
 
-    <# Ensure the user executing the script is not the same as the farm admin account provided #>    
     $Global:spCentralAdmin = Get-SPWebApplication -IncludeCentralAdministration | Where{$_.DisplayName -like '*Central Administration*'}
     $spFarm = Get-SPFarm
     $spServers = $spFarm.Servers
@@ -666,7 +665,7 @@ function Read-SPSitesAndWebs (){
         {
             $siteTitle = "SiteCollection"
         }
-        $Script:dscConfigContent += "        SPSite " + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`r`n"
+        $Script:dscConfigContent += "        SPSite " + $siteGuid + "`r`n"
         $Script:dscConfigContent += "        {`r`n"
         $params.Url = $spSite.Url
         $results = Get-TargetResource @params
@@ -728,10 +727,10 @@ function Read-SPSitesAndWebs (){
             {
                 $resultsWeb.Remove("PsDscRunAsCredential")
             }
-            $Script:dscConfigContent += "        SPWeb " + $spweb.Title.Replace(" ", "") + "-" + [System.Guid]::NewGuid().toString() + "`r`n"
+            $Script:dscConfigContent += "        SPWeb " + [System.Guid]::NewGuid().toString() + "`r`n"
             $Script:dscConfigContent += "        {`r`n"
             $Script:dscConfigContent += Get-DSCBlock -Params $resultsWeb -ModulePath $moduleWeb
-            $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+            $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
             $Script:dscConfigContent += "        }`r`n"
 
             <# SPWeb Feature Section #>
@@ -751,7 +750,7 @@ function Read-SPSitesAndWebs (){
 
                 if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
                 {
-                    $Script:dscConfigContent += "        SPFeature " + $spweb.Title.Replace(" ", "") + "-" + $webFeature.DisplayName + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
+                    $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
                     $Script:dscConfigContent += "        {`r`n"
                 
                     <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
@@ -766,7 +765,7 @@ function Read-SPSitesAndWebs (){
                     }
 
                     $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
-                    $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+                    $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
                     $Script:dscConfigContent += "        }`r`n"
                 }
             }
@@ -802,7 +801,7 @@ function Read-SPSitesAndWebs (){
                     $resultsFeature.Remove("InstalAcount")
                 }
                 $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
-                $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteTitle.Replace(" ", "") + "-" + $siteGuid + "`";`r`n"
+                $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
                 $Script:dscConfigContent += "        }`r`n"
             }
         }
@@ -1864,12 +1863,15 @@ function Read-SPDistributedCacheService
     $module = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPDistributedCacheService\MSFT_SPDistributedCacheService.psm1")
     Import-Module $module
     $params = Get-DSCFakeParameters -ModulePath $module
-    $Script:dscConfigContent += "        SPDistributedCacheService " + [System.Guid]::NewGuid().ToString() + "`r`n"
-    $Script:dscConfigContent += "        {`r`n"
     $params.Name = "DistributedCache"
     $results = Get-TargetResource @params
-    $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-    $Script:dscConfigContent += "        }`r`n"
+    if($results.Get_Item("Ensure").ToLower() -eq "present")
+    {
+        $Script:dscConfigContent += "        SPDistributedCacheService " + [System.Guid]::NewGuid().ToString() + "`r`n"
+        $Script:dscConfigContent += "        {`r`n"
+        $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+        $Script:dscConfigContent += "        }`r`n"
+    }
 }
 
 function Read-SPAlternateUrl
@@ -1949,7 +1951,7 @@ function Get-SPReverseDSC()
     Orchestrator
 
     <## Prompts the user to specify the FOLDER path where the resulting PowerShell DSC Configuration Script will be saved. #>
-    $OutputDSCPath = Read-Host "Please Enter Output Folder for DSC Configuration (Will be Created as Necessary)"
+    $OutputDSCPath = Read-Host "Please enter the full path of the output folder for DSC Configuration (will be created as necessary)"
 
     <## Ensures the specified output folder path actually exists; if not, tries to create it and throws an exception if we can't. ##>
     while (!(Test-Path -Path $OutputDSCPath -PathType Container -ErrorAction SilentlyContinue))
