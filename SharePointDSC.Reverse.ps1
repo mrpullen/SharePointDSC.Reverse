@@ -1,6 +1,6 @@
 <##############################################################
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
- # v1.0.0.40 - Nik Charlebois
+ # v1.0.0.41 - Nik Charlebois
  ##############################################################>
 <## Switches ##>
 param([switch]$SkipFeatures,
@@ -486,7 +486,7 @@ function Read-SPJoinFarm (){
     {
         $params.Remove("InstallAccount")
     }
-    $fakePass = ConvertTo-SecureString "FakePassword" -AsPlainText -Force
+    $fakePass = ConvertTo-SecureStringï¿½"FakePassword" -AsPlainText -Force
     $fakeCreds = New-Object System.Management.Automation.PSCredential ("FakeUsername", $fakePass)
     $params.Passphrase = $fakeCreds
     $results = Get-TargetResource @params
