@@ -2,6 +2,9 @@
  # This script is used to analyze an existing SharePoint (2013, 2016 or greater), and to produce the resulting PowerShell DSC Configuration Script representing it. Its purpose is to help SharePoint Admins and Devs replicate an existing SharePoint farm in an isolated area in order to troubleshoot an issue. This script needs to be executed directly on one of the SharePoint server in the far we wish to replicate. Upon finishing its execution, this Powershell script will prompt the user to specify a path to a FOLDER where the resulting PowerShell DSC Configuraton (.ps1) script will be generated. The resulting script will be named "SP-Farm.DSC.ps1" and will contain an exact description, in DSC notation, of the various components and configuration settings of the current SharePoint Farm. This script can then be used in an isolated environment to replicate the SharePoint server farm. The script could also be used as a simple textual (while in a DSC notation format) description of what the configuraton of the SharePoint farm looks like. This script is meant to be community driven, and everyone is encourage to participate and help improve and mature it. It is not officially endorsed by Microsoft, and support is 'offered' on a best effort basis by its contributors. Bugs suggestions should be reported through the issue system on GitHub. They will be looked at as time permits.
  # v1.0.0.40 - Nik Charlebois
  ##############################################################>
+<## Switches ##>
+param([switch]$SkipFeatures,
+      [switch]$SkipWebs)
 
 <## Script Settings #>
 $VerbosePreference = "SilentlyContinue"
@@ -422,43 +425,46 @@ function Read-SPFarm (){
     $Script:dscConfigContent += "        }`r`n"
 
     <# SPFarm Feature Section #>
-    $versionFilter = $spMajorVersion.ToString() + "*"
-    $farmFeatures = Get-SPFeature | ?{$_.Scope -eq "Farm" -and $_.Version -like $versionFilter}
-    $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
-    Import-Module $moduleFeature
-    $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
-
-    $featuresAlreadyAdded = @()
-    foreach($farmFeature in $farmFeatures)
+    if(!$SkipFeatures)
     {
-        if(!$featuresAlreadyAdded.Contains($farmFeature.DisplayName))
+        $versionFilter = $spMajorVersion.ToString() + "*"
+        $farmFeatures = Get-SPFeature | ?{$_.Scope -eq "Farm" -and $_.Version -like $versionFilter}
+        $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+        Import-Module $moduleFeature
+        $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+
+        $featuresAlreadyAdded = @()
+        foreach($farmFeature in $farmFeatures)
         {
-            $featuresAlreadyAdded += $farmFeature.DisplayName
-            $paramsFeature.Name = $farmFeature.DisplayName
-            $paramsFeature.FeatureScope = "Farm"
-            $resultsFeature = Get-TargetResource @paramsFeature
-
-            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+            if(!$featuresAlreadyAdded.Contains($farmFeature.DisplayName))
             {
-                $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
-                $Script:dscConfigContent += "        {`r`n"
+                $featuresAlreadyAdded += $farmFeature.DisplayName
+                $paramsFeature.Name = $farmFeature.DisplayName
+                $paramsFeature.FeatureScope = "Farm"
+                $resultsFeature = Get-TargetResource @paramsFeature
 
-                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
-                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
-                if(!$resultsFeature.ContainsKey("InstallAccount"))
+                if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
                 {
-                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
-                }
-                if($resultsFeature.ContainsKey("InstalAcount"))
-                {
-                    $resultsFeature.Remove("InstalAcount")
-                }
-                #$resultsFeature["Version"] = $farmFeature.Version.
+                    $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                    $Script:dscConfigContent += "        {`r`n"
 
-                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
-                $Script:dscConfigContent += "        }`r`n"
+                    <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                       https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                    if(!$resultsFeature.ContainsKey("InstallAccount"))
+                    {
+                        $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                    }
+                    if($resultsFeature.ContainsKey("InstalAcount"))
+                    {
+                        $resultsFeature.Remove("InstalAcount")
+                    }
+                    #$resultsFeature["Version"] = $farmFeature.Version.
+
+                    $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                    $Script:dscConfigContent += "        }`r`n"
+                }
             }
-            }
+        }
     }
 }
 
@@ -480,11 +486,13 @@ function Read-SPJoinFarm (){
     {
         $params.Remove("InstallAccount")
     }
-
+    $fakePass = ConvertTo-SecureString "FakePassword" -AsPlainText -Force
+    $fakeCreds = New-Object System.Management.Automation.PSCredential ("FakeUsername", $fakePass)
+    $params.Passphrase = $fakeCreds
     $results = Get-TargetResource @params
 
     <# Remove the default generated PassPhrase and ensure the resulting Configuration Script will prompt user for it. #>
-    $results.Remove("Passphrase");    
+    $results.Remove("Passphrase");
     $Script:dscConfigContent += "            Passphrase = New-Object System.Management.Automation.PSCredential ('Passphrase', `$passphrase);`r`n"
 
     $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
@@ -513,37 +521,40 @@ function Read-SPWebApplications (){
         Read-SPDesignerSettings($spWebApplications.Url.ToString(), "WebApplication", $spWebApp.Name.Replace(" ", ""))
 
         <# SPWebApplication Feature Section #>
-        $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
-        $versionFilter = $spMajorVersion.ToString() + "*"
-        $webAppFeatures = Get-SPFeature | ?{$_.Scope -eq "WebApplication" -and $_.Version -like $versionFilter}
-        $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
-        Import-Module $moduleFeature
-        $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
-        foreach($webAppFeature in $webAppFeatures)
+        if(!$SkipFeatures)
         {
-            $paramsFeature.Name = $webAppFeature.DisplayName
-            $paramsFeature.FeatureScope = "WebApplication"
-            $paramsFeature.Url = $spWebApp.Url
-            $resultsFeature = Get-TargetResource @paramsFeature
-
-            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+            $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+            $versionFilter = $spMajorVersion.ToString() + "*"
+            $webAppFeatures = Get-SPFeature | ?{$_.Scope -eq "WebApplication" -and $_.Version -like $versionFilter}
+            $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+            Import-Module $moduleFeature
+            $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+            foreach($webAppFeature in $webAppFeatures)
             {
-                $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
-                $Script:dscConfigContent += "        {`r`n"
+                $paramsFeature.Name = $webAppFeature.DisplayName
+                $paramsFeature.FeatureScope = "WebApplication"
+                $paramsFeature.Url = $spWebApp.Url
+                $resultsFeature = Get-TargetResource @paramsFeature
+
+                if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+                {
+                    $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                    $Script:dscConfigContent += "        {`r`n"
             
-                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
-                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
-                if(!$resultsFeature.ContainsKey("InstallAccount"))
-                {
-                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                    <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                       https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                    if(!$resultsFeature.ContainsKey("InstallAccount"))
+                    {
+                        $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                    }
+                    if($resultsFeature.ContainsKey("InstalAcount"))
+                    {
+                        $resultsFeature.Remove("InstalAcount")
+                    }
+                    $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                    $Script:dscConfigContent += "            DependsOn = `"[SPWebApplication]" + $spWebApp.Name.Replace(" ", "") + "`";`r`n"
+                    $Script:dscConfigContent += "        }`r`n"
                 }
-                if($resultsFeature.ContainsKey("InstalAcount"))
-                {
-                    $resultsFeature.Remove("InstalAcount")
-                }
-                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
-                $Script:dscConfigContent += "            DependsOn = `"[SPWebApplication]" + $spWebApp.Name.Replace(" ", "") + "`";`r`n"
-                $Script:dscConfigContent += "        }`r`n"
             }
         }
 
@@ -649,6 +660,10 @@ function Read-SPSitesAndWebs (){
         {
             $results.Remove("Description")
         }
+        else
+        {
+            $results.Description = $results.Description.Replace("`"", "'")
+        }
         $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
         $Script:dscConfigContent += "            DependsOn =  `"[SPWebApplication]" + $spSite.WebApplication.Name.Replace(" ", "") + "`"`r`n"
         $Script:dscConfigContent += "        }`r`n"
@@ -660,49 +675,92 @@ function Read-SPSitesAndWebs (){
         {
             Read-SPDesignerSettings($spSite.Url, "SiteCollection")
         }
-        
-        $webs = Get-SPWeb -Limit All -Site $spsite
-        foreach($spweb in $webs)
+        if(!$SkipWebs)
         {
-            $moduleWeb = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWeb\MSFT_SPWeb.psm1")
-            Import-Module $moduleWeb
-            $paramsWeb = Get-DSCFakeParameters -ModulePath $moduleWeb
-            $paramsWeb.Url = $spweb.Url            
-            $resultsWeb = Get-TargetResource @paramsWeb
-            if(!$resultsWeb.ContainsKey("InstallAccount"))
+            $webs = Get-SPWeb -Limit All -Site $spsite
+            foreach($spweb in $webs)
             {
-                $resultsWeb.Add("InstallAccount", "`$CredsFarmAccount")
-            }
-            if($resultsWeb.ContainsKey("PsDscRunAsCredential"))
-            {
-                $resultsWeb.Remove("PsDscRunAsCredential")
-            }
-            $Script:dscConfigContent += "        SPWeb " + [System.Guid]::NewGuid().toString() + "`r`n"
-            $Script:dscConfigContent += "        {`r`n"
-            $Script:dscConfigContent += Get-DSCBlock -Params $resultsWeb -ModulePath $moduleWeb
-            $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
-            $Script:dscConfigContent += "        }`r`n"
+                $moduleWeb = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPWeb\MSFT_SPWeb.psm1")
+                Import-Module $moduleWeb
+                $paramsWeb = Get-DSCFakeParameters -ModulePath $moduleWeb
+                $paramsWeb.Url = $spweb.Url            
+                $resultsWeb = Get-TargetResource @paramsWeb
+                if(!$resultsWeb.ContainsKey("InstallAccount"))
+                {
+                    $resultsWeb.Add("InstallAccount", "`$CredsFarmAccount")
+                }
+                if($resultsWeb.ContainsKey("PsDscRunAsCredential"))
+                {
+                    $resultsWeb.Remove("PsDscRunAsCredential")
+                }
+                $Script:dscConfigContent += "        SPWeb " + [System.Guid]::NewGuid().toString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+                $Script:dscConfigContent += Get-DSCBlock -Params $resultsWeb -ModulePath $moduleWeb
+                $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
+                $Script:dscConfigContent += "        }`r`n"
 
-            <# SPWeb Feature Section #>
+                <# SPWeb Feature Section #>
+                if(!$SkipFeatures)
+                {
+                    $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
+                    $versionFilter = $spMajorVersion.ToString() + "*"
+                    $webFeatures = Get-SPFeature | ?{$_.Scope -eq "Web" -and $_.Version -like $versionFilter}
+                    $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
+                    Import-Module $moduleFeature
+                    $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
+
+                    foreach($webFeature in $webFeatures)
+                    {
+                        $paramsFeature.Name = $webFeature.DisplayName
+                        $paramsFeature.FeatureScope = "Web"
+                        $paramsFeature.Url = $spWeb.Url
+                        $resultsFeature = Get-TargetResource @paramsFeature
+
+                        if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
+                        {
+                            $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                            $Script:dscConfigContent += "        {`r`n"
+                
+                            <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
+                               https://github.com/PowerShell/SharePointDsc/issues/481 #>
+                            if(!$resultsFeature.ContainsKey("InstallAccount"))
+                            {
+                                $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
+                            }
+                            if($resultsFeature.ContainsKey("InstalAcount"))
+                            {
+                                $resultsFeature.Remove("InstalAcount")
+                            }
+
+                            $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
+                            $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
+                            $Script:dscConfigContent += "        }`r`n"
+                        }
+                    }
+                }
+            }
+        }
+        <# SPSite Feature Section #>
+        if(!$SkipFeatures)
+        {
             $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
             $versionFilter = $spMajorVersion.ToString() + "*"
-            $webFeatures = Get-SPFeature | ?{$_.Scope -eq "Web" -and $_.Version -like $versionFilter}
+            $siteFeatures = Get-SPFeature | ?{$_.Scope -eq "Site" -and $_.Version -like $versionFilter}
             $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
             Import-Module $moduleFeature
             $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
-
-            foreach($webFeature in $webFeatures)
+            foreach($siteFeature in $siteFeatures)
             {
-                $paramsFeature.Name = $webFeature.DisplayName
-                $paramsFeature.FeatureScope = "Web"
-                $paramsFeature.Url = $spWeb.Url
+                $paramsFeature.Name = $siteFeature.DisplayName
+                $paramsFeature.FeatureScope = "Site"
+                $paramsFeature.Url = $spSite.Url
                 $resultsFeature = Get-TargetResource @paramsFeature
 
                 if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
                 {
-                    $Script:dscConfigContent += "        SPFeature " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                    $Script:dscConfigContent += "        SPFeature " + $siteTitle.Replace(" ", "") + "-" + $siteFeature.DisplayName + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
                     $Script:dscConfigContent += "        {`r`n"
-                
+            
                     <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
                        https://github.com/PowerShell/SharePointDsc/issues/481 #>
                     if(!$resultsFeature.ContainsKey("InstallAccount"))
@@ -713,46 +771,10 @@ function Read-SPSitesAndWebs (){
                     {
                         $resultsFeature.Remove("InstalAcount")
                     }
-
                     $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
                     $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
                     $Script:dscConfigContent += "        }`r`n"
                 }
-            }
-        }
-
-        <# SPSite Feature Section #>
-        $spMajorVersion = (Get-SPDSCInstalledProductVersion).FileMajorPart
-        $versionFilter = $spMajorVersion.ToString() + "*"
-        $siteFeatures = Get-SPFeature | ?{$_.Scope -eq "Site" -and $_.Version -like $versionFilter}
-        $moduleFeature = Resolve-Path ($Script:SPDSCPath + "\DSCResources\MSFT_SPFeature\MSFT_SPFeature.psm1")
-        Import-Module $moduleFeature
-        $paramsFeature = Get-DSCFakeParameters -ModulePath $moduleFeature
-        foreach($siteFeature in $siteFeatures)
-        {
-            $paramsFeature.Name = $siteFeature.DisplayName
-            $paramsFeature.FeatureScope = "Site"
-            $paramsFeature.Url = $spSite.Url
-            $resultsFeature = Get-TargetResource @paramsFeature
-
-            if($resultsFeature.Get_Item("Ensure").ToLower() -eq "present")
-            {
-                $Script:dscConfigContent += "        SPFeature " + $siteTitle.Replace(" ", "") + "-" + $siteFeature.DisplayName + "-" + [System.Guid]::NewGuid().ToString() + "`r`n"
-                $Script:dscConfigContent += "        {`r`n"
-            
-                <# Manually add the InstallAccount param due to a bug in 1.5.0.0 that returns a param named InstalAcount (typo) instead.
-                   https://github.com/PowerShell/SharePointDsc/issues/481 #>
-                if(!$resultsFeature.ContainsKey("InstallAccount"))
-                {
-                    $resultsFeature.Add("InstallAccount", "`$CredsFarmAccount")
-                }
-                if($resultsFeature.ContainsKey("InstalAcount"))
-                {
-                    $resultsFeature.Remove("InstalAcount")
-                }
-                $Script:dscConfigContent += Get-DSCBlock -Params $resultsFeature -ModulePath $moduleFeature
-                $Script:dscConfigContent += "            DependsOn = `"[SPSite]" + $siteGuid + "`";`r`n"
-                $Script:dscConfigContent += "        }`r`n"
             }
         }
     }
@@ -1393,16 +1415,22 @@ function Read-SPSearchIndexPartition
                                         $_.GetType().Name -eq "IndexComponent" 
                                     }
 
+        [System.Collections.ArrayList]$indexesAlreadyScanned = @()
         foreach($indexComponent in $indexComponents)
         {
-            $Script:dscConfigContent += "        SPSearchIndexPartition " + [System.Guid]::NewGuid().ToString() + "`r`n"
-            $Script:dscConfigContent += "        {`r`n"
-            $params.ServiceAppName = $ssa.DisplayName
-            $params.Index = $indexComponent.IndexPartitionOrdinal
-            $params.Servers = $indexComponent.ServerName
-            $results = Get-TargetResource @params
-            $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
-            $Script:dscConfigContent += "        }`r`n"
+            if(!$indexesAlreadyScanned.Contains($indexComponent.IndexPartitionOrdinal))
+            {
+                $indexesAlreadyScanned += $indexComponent.IndexPartitionOrdinal
+                $Script:dscConfigContent += "        SPSearchIndexPartition " + [System.Guid]::NewGuid().ToString() + "`r`n"
+                $Script:dscConfigContent += "        {`r`n"
+                $params.ServiceAppName = $ssa.DisplayName
+                $params.Index = $indexComponent.IndexPartitionOrdinal
+                $params.Servers = $indexComponent.ServerName
+                $params.RootDirectory = $indexComponent.RootDirectory
+                $results = Get-TargetResource @params
+                $Script:dscConfigContent += Get-DSCBlock -Params $results -ModulePath $module
+                $Script:dscConfigContent += "        }`r`n"
+            }
         }
     }
 }
@@ -1969,7 +1997,7 @@ function Set-ObtainRequiredCredentials
                 $accountName = $accountParts[1]
             }
         }
-        $Script:dscConfigContent += "    `$Creds" + $accountName + "= Get-Credential -UserName `"" + $account + "`" -Message `"Credentials for " + $account + "`"`r`n"
+        $Script:dscConfigContent += "    `$Creds" + $accountName.Replace("-","_") + "= Get-Credential -UserName `"" + $account + "`" -Message `"Credentials for " + $account + "`"`r`n"
     }
 
     $Script:dscConfigContent += "`r`n"
